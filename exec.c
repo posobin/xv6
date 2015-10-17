@@ -39,7 +39,7 @@ _exec(char *path, char **argv)
   // Check for shebang
   if(readi(ip, tmp, 0, 2) < sizeof(tmp))
     goto bad;
-  if(tmp[0] == '#' && tmp[1] == '!') {
+  if(tmp[0] == '#' && tmp[1] == '!'){
     // TODO add arguments parsing
     progpath = kalloc();
     i = readi(ip, progpath, 2, PGSIZE);
@@ -48,7 +48,7 @@ _exec(char *path, char **argv)
     for(j = 0; j < i && progpath[j] != ' ' &&
         progpath[j] != '\t' && progpath[j] != '\n'; ++j)
       ;
-    if(j == PGSIZE) {
+    if(j == PGSIZE){
       st = -1;
       goto exit;
     }

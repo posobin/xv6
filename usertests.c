@@ -11,6 +11,7 @@
 char buf[8192];
 char name[3];
 char *echoargv[] = { "echo", "ALL", "TESTS", "PASSED", 0 };
+char *emptyargv[] = { "", 0 };
 int stdout = 1;
 
 // simple file system tests
@@ -193,11 +194,80 @@ void dirtest(void)
 void
 exectest(void)
 {
+  int fd, fd2, pid;
+  char rec_test_fname[] = "rec_test";
+  char rec_test_fname2[] = "rec_test2";
+  char rec_str[] = "#!rec_test";
+  char rec_str2[] = "#!ls";
+
   printf(stdout, "exec test\n");
+  fd = open(rec_test_fname, O_CREATE|O_RDWR);
+  if(fd < 0){
+    printf(stdout, "error: create %s failed!\n", rec_test_fname);
+    exit();
+  }
+
+  if(write(fd, rec_str, sizeof(rec_str)) != sizeof(rec_str)){
+    printf(stdout, "error: write %s failed!\n", rec_test_fname);
+    exit();
+  }
+  close(fd);
+
+  emptyargv[0] = rec_test_fname;
+  if(exec(rec_test_fname, emptyargv) != -1){
+    printf(stdout, "error: recursive exec has not failed\
+        (which is a failure)\n");
+    exit();
+  }
+  unlink(rec_test_fname);
+
+  fd = open(rec_test_fname, O_CREATE|O_RDWR);
+  fd2 = open(rec_test_fname2, O_CREATE|O_RDWR);
+  if(fd < 0 || fd2 < 0){
+    printf(stdout, "error: create %s failed!\n",
+        (fd < 0 ? rec_test_fname : rec_test_fname2));
+    exit();
+  }
+  if(write(fd, rec_str2, sizeof(rec_str2)) != sizeof(rec_str2)){
+    printf(stdout, "error: write %s failed!\n", rec_test_fname);
+    exit();
+  }
+  if(write(fd2, rec_str, sizeof(rec_str)) != sizeof(rec_str)){
+    printf(stdout, "error: write %s failed!\n", rec_test_fname2);
+    exit();
+  }
+
+  close(fd);
+  close(fd2);
+
+  unlink("exec-failed");
+  pid = fork();
+  if(pid==0){
+    emptyargv[0] = rec_test_fname2;
+    exec(rec_test_fname2, emptyargv);
+    close(open("exec-failed", O_CREATE));
+    exit();
+  } else if(pid < 0){
+    printf(stdout, "exectest: fork failed!\n");
+    exit();
+  }
+  wait();
+  fd = open("exec-failed", 0);
+  if(fd >= 0){
+    printf(stdout, "recursive exec test failed!\n");
+    close(fd);
+    exit();
+  }
+  printf(stdout, "recursive exec ok\n");
+
+  unlink(rec_test_fname);
+  unlink(rec_test_fname2);
+
   if(exec("echo", echoargv) < 0){
     printf(stdout, "exec echo failed\n");
     exit();
   }
+  printf(stdout, "exec ok\n");
 }
 
 // simple fork and pipe read/write
