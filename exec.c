@@ -7,19 +7,29 @@
 #include "x86.h"
 #include "elf.h"
 
+static int _exec(char* path, char **argv);
+
 int
-exec(char *path, char **argv)
+exec(char *path, char **argv) {
+  proc->recursion_depth = 0;
+  return _exec(path, argv);
+}
+
+static int
+_exec(char *path, char **argv)
 {
   char *s, *last;
-  int i, off, st;
+  int i, j, off, st;
   uint argc, sz, sp, ustack[3+MAXARG+1];
   struct elfhdr elf;
   struct inode *ip;
   struct proghdr ph;
   pde_t *pgdir, *oldpgdir;
   char* args[3];
+  char* progpath;
   char tmp[2];
-  char ch;
+  if(proc->recursion_depth > 5)
+    return -1;
 
   if((ip = namei(path)) == 0)
     return -1;
@@ -27,24 +37,30 @@ exec(char *path, char **argv)
   pgdir = 0;
 
   // Check for shebang
-  // TODO deal with recursive shebangs
   if(readi(ip, tmp, 0, 2) < sizeof(tmp))
     goto bad;
   if(tmp[0] == '#' && tmp[1] == '!') {
-    ch = 0;
-    i = 0;
     // TODO add arguments parsing
-    while(ch != ' ' && ch != '\n' && (st = readi(ip, &ch, i + 2, 1)) > 0)
-      i++;
-    char progpath[1024]; // TODO find out max possible path length
-    readi(ip, progpath, 2, i);
+    progpath = kalloc();
+    i = readi(ip, progpath, 2, PGSIZE);
     iunlockput(ip);
-    progpath[st > 0 ? i - 1 : i] = 0;
+    ip = 0;
+    for(j = 0; j < i && progpath[j] != ' ' &&
+        progpath[j] != '\t' && progpath[j] != '\n'; ++j)
+      ;
+    if(j == PGSIZE) {
+      st = -1;
+      goto exit;
+    }
+    progpath[j] = 0;
     args[0] = progpath;
     args[1] = path;
     args[2] = 0;
-    exec(progpath, args);
-    return 0;
+    proc->recursion_depth++;
+    st = _exec(progpath, args);
+exit:
+    kfree(progpath);
+    return st;
   }
   // Check ELF header
   if(readi(ip, (char*)&elf, 0, sizeof(elf)) < sizeof(elf))
