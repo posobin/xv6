@@ -19,13 +19,13 @@ static int
 _exec(char *path, char **argv)
 {
   char *s, *last;
-  int i, j, off, st;
+  int i, j, off, st, linelen;
   uint argc, sz, sp, ustack[3+MAXARG+1];
   struct elfhdr elf;
   struct inode *ip;
   struct proghdr ph;
   pde_t *pgdir, *oldpgdir;
-  char* args[3];
+  char* args[MAXARG + 3];
   char* progpath;
   char tmp[2];
   if(proc->recursion_depth > 5)
@@ -40,7 +40,6 @@ _exec(char *path, char **argv)
   if(readi(ip, tmp, 0, 2) < sizeof(tmp))
     goto bad;
   if(tmp[0] == '#' && tmp[1] == '!'){
-    // TODO add arguments parsing
     progpath = kalloc();
     i = readi(ip, progpath, 2, PGSIZE);
     iunlockput(ip);
@@ -52,10 +51,28 @@ _exec(char *path, char **argv)
       st = -1;
       goto exit;
     }
-    progpath[j] = 0;
+    argc = 0;
+    for(linelen = j; linelen < i && progpath[linelen] != '\n' &&
+        argc + 1 < sizeof(args); ++linelen){
+      if(progpath[linelen] == ' ' || progpath[linelen] == '\t')
+        progpath[linelen] = 0;
+      else if(progpath[linelen - 1] == 0)
+        args[++argc] = progpath + linelen;
+    }
+    if(argc >= MAXARG || linelen >= i){
+      st = -1;
+      goto exit;
+    }
+    progpath[linelen] = 0;
     args[0] = progpath;
-    args[1] = path;
-    args[2] = 0;
+    for(i = 0; argv[i] && argc < MAXARG; ++i)
+      args[++argc] = argv[i];
+
+    if(argc >= MAXARG){
+      st = -1;
+      goto exit;
+    }
+    args[++argc] = 0;
     proc->recursion_depth++;
     st = _exec(progpath, args);
 exit:
