@@ -7,16 +7,15 @@
 #include "x86.h"
 #include "elf.h"
 
-static int _exec(char* path, char **argv);
+static int _exec(char* path, char **argv, int current_depth);
 
 int
 exec(char *path, char **argv) {
-  proc->recursion_depth = 0;
-  return _exec(path, argv);
+  return _exec(path, argv, 5);
 }
 
 static int
-_exec(char *path, char **argv)
+_exec(char *path, char **argv, int current_depth)
 {
   char *s, *last;
   int i, j, off, st, linelen;
@@ -28,7 +27,7 @@ _exec(char *path, char **argv)
   char* args[MAXARG + 3];
   char* progpath;
   char tmp[2];
-  if(proc->recursion_depth > 5)
+  if(--current_depth < 0)
     return -1;
 
   if((ip = namei(path)) == 0)
@@ -44,7 +43,10 @@ _exec(char *path, char **argv)
     i = readi(ip, progpath, 2, PGSIZE);
     iunlockput(ip);
     ip = 0;
-    for(j = 0; j < i && progpath[j] != ' ' &&
+    for(j = 0; j < i && progpath[j] == ' '; ++j)
+      ;
+    args[0] = progpath + j;
+    for(; j < i && progpath[j] != ' ' &&
         progpath[j] != '\t' && progpath[j] != '\n'; ++j)
       ;
     if(j == PGSIZE){
@@ -64,8 +66,8 @@ _exec(char *path, char **argv)
       goto exit;
     }
     progpath[linelen] = 0;
-    args[0] = progpath;
-    for(i = 0; argv[i] && argc < MAXARG; ++i)
+    args[++argc] = path;
+    for(i = 1; argv[i] && argc < MAXARG; ++i)
       args[++argc] = argv[i];
 
     if(argc >= MAXARG){
@@ -73,8 +75,7 @@ _exec(char *path, char **argv)
       goto exit;
     }
     args[++argc] = 0;
-    proc->recursion_depth++;
-    st = _exec(progpath, args);
+    st = _exec(args[0], args, current_depth);
 exit:
     kfree(progpath);
     return st;
