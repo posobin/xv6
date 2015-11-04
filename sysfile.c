@@ -356,6 +356,23 @@ sys_mknod(void)
 }
 
 int
+sys_mkfifo(void)
+{
+  struct inode *ip;
+  char* path;
+  int len;
+  begin_trans();
+  if((len = argstr(0, &path)) < 0 ||
+      (ip = create(path, T_PIPE, 0, 0)) == 0){
+    commit_trans();
+    return -1;
+  }
+  iunlockput(ip);
+  commit_trans();
+  return 0;
+}
+
+int
 sys_chdir(void)
 {
   char *path;
