@@ -61,11 +61,14 @@ fileclose(struct file *f)
   if(f->ref < 1)
     panic("fileclose");
   if(f->type == FD_PIPE){
-    if(f->writable){
-      f->pipe->writeopen--;
-    } else {
-      f->pipe->readopen--;
+    struct pipe* p = f->pipe;
+    acquire(&p->lock);
+    if(f->writable && --p->writeopen == 0){
+      wakeup(&p->nread);
+    } else if(--p->readopen == 0){
+      wakeup(&p->nwrite);
     }
+    release(&p->lock);
   }
   if(--f->ref > 0){
     release(&ftable.lock);

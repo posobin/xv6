@@ -319,13 +319,16 @@ sys_open(void)
       iunlockput(ip);
       return -1;
     }
+    struct pipe* p = ip->write_pipe->pipe;
+    acquire(&p->lock);
     if(omode & O_WRONLY){
-      ip->write_pipe->pipe->writeopen++;
+      p->writeopen++;
       ip->write_pipe->ref++;
     } else {
-      ip->read_pipe->pipe->readopen++;
+      p->readopen++;
       ip->read_pipe->ref++;
     }
+    release(&p->lock);
     iunlock(ip);
     return fd;
   }
