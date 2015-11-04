@@ -15,6 +15,7 @@ int mknod(char*, short, short);
 int unlink(char*);
 int fstat(int fd, struct stat*);
 int link(char*, char*);
+int mkfifo(char*);
 int mkdir(char*);
 int chdir(char*);
 int dup(int);

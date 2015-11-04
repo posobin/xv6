@@ -7,7 +7,7 @@
 #include "param.h"
 #include "fs.h"
 #include "file.h"
-#include "spinlock.h"
+#include "pipe.h"
 
 struct devsw devsw[NDEV];
 struct {
@@ -60,6 +60,13 @@ fileclose(struct file *f)
   acquire(&ftable.lock);
   if(f->ref < 1)
     panic("fileclose");
+  if(f->type == FD_PIPE){
+    if(f->writable){
+      f->pipe->writeopen--;
+    } else {
+      f->pipe->readopen--;
+    }
+  }
   if(--f->ref > 0){
     release(&ftable.lock);
     return;

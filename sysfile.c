@@ -13,6 +13,7 @@
 #include "fs.h"
 #include "file.h"
 #include "fcntl.h"
+#include "pipe.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -245,7 +246,8 @@ create(char *path, short type, short major, short minor)
   if((ip = dirlookup(dp, name, &off)) != 0){
     iunlockput(dp);
     ilock(ip);
-    if(type == T_FILE && ip->type == T_FILE)
+    if((type == T_FILE && ip->type == T_FILE) ||
+        (type == T_FILE && ip->type == T_PIPE))
       return ip;
     iunlockput(ip);
     return 0;
@@ -300,6 +302,32 @@ sys_open(void)
       iunlockput(ip);
       return -1;
     }
+  }
+
+  if(ip->type == T_PIPE){
+    if(omode & O_RDWR)
+      return -1;
+    if(ip->read_pipe == 0){
+      if(pipealloc(&ip->read_pipe, &ip->write_pipe) < 0){
+        iunlockput(ip);
+        return -1;
+      }
+      ip->read_pipe->pipe->writeopen = 0;
+    }
+    if((!(omode & O_WRONLY) && ((fd = fdalloc(ip->read_pipe)) < 0)) ||
+        ((omode & O_WRONLY) && ((fd = fdalloc(ip->write_pipe)) < 0))){
+      iunlockput(ip);
+      return -1;
+    }
+    if(omode & O_WRONLY){
+      ip->write_pipe->pipe->writeopen++;
+      ip->write_pipe->ref++;
+    } else {
+      ip->read_pipe->pipe->readopen++;
+      ip->read_pipe->ref++;
+    }
+    iunlock(ip);
+    return fd;
   }
 
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
@@ -367,6 +395,7 @@ sys_mkfifo(void)
     commit_trans();
     return -1;
   }
+  ip->read_pipe = ip->write_pipe = 0;
   iunlockput(ip);
   commit_trans();
   return 0;
