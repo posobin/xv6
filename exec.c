@@ -10,7 +10,8 @@
 static int _exec(char* path, char **argv, int current_depth);
 
 int
-exec(char *path, char **argv) {
+exec(char *path, char **argv)
+{
   return _exec(path, argv, 5);
 }
 
