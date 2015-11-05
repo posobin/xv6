@@ -208,6 +208,10 @@ sys_unlink(void)
     iunlockput(ip);
     goto bad;
   }
+  if(ip->type == T_PIPE && ip->read_pipe != 0){
+    kfree((char*)ip->read_pipe->pipe);
+    ip->read_pipe = ip->write_pipe = 0;
+  }
 
   memset(&de, 0, sizeof(de));
   if(writei(dp, (char*)&de, off, sizeof(de)) != sizeof(de))
