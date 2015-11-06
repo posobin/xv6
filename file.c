@@ -65,7 +65,7 @@ fileclose(struct file *f)
     acquire(&p->lock);
     if(f->writable && --p->writeopen == 0){
       wakeup(&p->nread);
-    } else if(--p->readopen == 0){
+    } else if(!f->writable && --p->readopen == 0){
       wakeup(&p->nwrite);
     }
     release(&p->lock);
