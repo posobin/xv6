@@ -332,8 +332,21 @@ sys_open(void)
       p->readopen++;
       ip->read_pipe->ref++;
     }
-    release(&p->lock);
     iunlock(ip);
+    if(omode & O_WRONLY){
+      while (p->readopen == 1){
+        wakeup(&p->nwrite);
+        sleep(&p->nread, &p->lock);
+      }
+      wakeup(&p->nwrite);
+    } else {
+      while (p->writeopen == 0){
+        wakeup(&p->nread);
+        sleep(&p->nwrite, &p->lock);
+      }
+      wakeup(&p->nread);
+    }
+    release(&p->lock);
     return fd;
   }
 
