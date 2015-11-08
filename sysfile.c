@@ -208,9 +208,9 @@ sys_unlink(void)
     iunlockput(ip);
     goto bad;
   }
-  if(ip->type == T_PIPE && ip->read_pipe != 0){
-    kfree((char*)ip->read_pipe->pipe);
-    ip->read_pipe = ip->write_pipe = 0;
+  if(ip->type == T_PIPE && ip->read_file != 0){
+    kfree((char*)ip->read_file->pipe);
+    ip->read_file = ip->write_file = 0;
   }
 
   memset(&de, 0, sizeof(de));
@@ -309,42 +309,48 @@ sys_open(void)
   }
 
   if(ip->type == T_PIPE){
-    if(omode & O_RDWR)
-      return -1;
-    if(ip->read_pipe == 0){
-      if(pipealloc(&ip->read_pipe, &ip->write_pipe) < 0){
-        iunlockput(ip);
-        return -1;
-      }
-      ip->read_pipe->pipe->writeopen = 0;
-    }
-    if((!(omode & O_WRONLY) && ((fd = fdalloc(ip->read_pipe)) < 0)) ||
-        ((omode & O_WRONLY) && ((fd = fdalloc(ip->write_pipe)) < 0))){
+    if(omode & O_RDWR){ // POSIX leaves this case undefined
       iunlockput(ip);
       return -1;
     }
-    struct pipe* p = ip->write_pipe->pipe;
+    if(ip->read_file == 0){ // Create pipe if it has not been already created
+      if(pipealloc(&ip->read_file, &ip->write_file) < 0){
+        iunlockput(ip);
+        return -1;
+      }
+      ip->read_file->pipe->writeopen = 0;
+      ip->read_file->pipe->readopen = 0;
+    }
+    if((!(omode & O_WRONLY) && ((fd = fdalloc(ip->read_file)) < 0)) ||
+        ((omode & O_WRONLY) && ((fd = fdalloc(ip->write_file)) < 0))){
+      iunlockput(ip);
+      return -1;
+    }
+    struct pipe* p = ip->write_file->pipe;
     acquire(&p->lock);
     if(omode & O_WRONLY){
       p->writeopen++;
-      ip->write_pipe->ref++;
+      ip->write_file->ref++;
     } else {
       p->readopen++;
-      ip->read_pipe->ref++;
+      ip->read_file->ref++;
     }
     iunlock(ip);
+    // Wait ’till another end of pipe is open
+    // Behaviour is just like if O_NONBLOCK is clear in
+    // POSIX-compliant open.
     if(omode & O_WRONLY){
-      while (p->readopen == 1){
-        wakeup(&p->nwrite);
-        sleep(&p->nread, &p->lock);
-      }
-      wakeup(&p->nwrite);
-    } else {
-      while (p->writeopen == 0){
+      while (p->readopen == 0){
         wakeup(&p->nread);
         sleep(&p->nwrite, &p->lock);
       }
       wakeup(&p->nread);
+    } else {
+      while (p->writeopen == 0){
+        wakeup(&p->nwrite);
+        sleep(&p->nread, &p->lock);
+      }
+      wakeup(&p->nwrite);
     }
     release(&p->lock);
     return fd;
@@ -415,7 +421,7 @@ sys_mkfifo(void)
     commit_trans();
     return -1;
   }
-  ip->read_pipe = ip->write_pipe = 0;
+  ip->read_file = ip->write_file = 0;
   iunlockput(ip);
   commit_trans();
   return 0;

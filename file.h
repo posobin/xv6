@@ -24,7 +24,7 @@ struct inode {
   uint addrs[NDIRECT+1];
 
   // Two files for pipe, used only when type == T_PIPE
-  struct file *read_pipe, *write_pipe;
+  struct file *read_file, *write_file;
 };
 #define I_BUSY 0x1
 #define I_VALID 0x2

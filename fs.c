@@ -290,6 +290,7 @@ ilock(struct inode *ip)
     ip->size = dip->size;
     memmove(ip->addrs, dip->addrs, sizeof(ip->addrs));
     brelse(bp);
+    ip->read_file = ip->write_file = 0;
     ip->flags |= I_VALID;
     if(ip->type == 0)
       panic("ilock: no type");

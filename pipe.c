@@ -44,7 +44,10 @@ pipealloc(struct file **f0, struct file **f1)
   return -1;
 }
 
-void
+// Closes pipe and returns 0 if at least one of the ends of the
+// pipe is still open somewhere, 1 otherwise (pipe is fully closed
+// in that case).
+int
 pipeclose(struct pipe *p, int writable)
 {
   acquire(&p->lock);
@@ -58,8 +61,11 @@ pipeclose(struct pipe *p, int writable)
   if(p->readopen == 0 && p->writeopen == 0){
     release(&p->lock);
     kfree((char*)p);
-  } else
+    return 1;
+  } else {
     release(&p->lock);
+    return 0;
+  }
 }
 
 //PAGEBREAK: 40
