@@ -379,7 +379,7 @@ sys_open(void)
       other_wakeup = &p->nread;
     }
     while (*other_end_count == 0){
-      if(p->is_deleted){
+      if(proc->killed || p->is_deleted){
         if(*our_end_count > 0) (*our_end_count)--;
         wakeup(other_wakeup);
         release(&p->lock);
