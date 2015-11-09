@@ -336,6 +336,8 @@ sys_open(void)
         iunlockput(ip);
         return -1;
       }
+      ip->read_file->type = FD_FIFO;
+      ip->write_file->type = FD_FIFO;
       ip->read_file->ip = ip;
       ip->write_file->ip = ip;
       ip->read_file->pipe->writeopen = 0;
@@ -357,10 +359,13 @@ sys_open(void)
     }
     iunlock(ip);
     if(omode & O_NONBLOCK){
-      release(&p->lock);
       if((omode & O_WRONLY) && p->readopen == 0){
+        release(&p->lock);
         return -1;
       }
+      if(omode & O_WRONLY) wakeup(&p->nread);
+      else wakeup(&p->nwrite);
+      release(&p->lock);
       return fd;
     }
     // Wait ’till another end of pipe is open as POSIX requires to

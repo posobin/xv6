@@ -61,7 +61,7 @@ fileclose(struct file *f)
   acquire(&ftable.lock);
   if(f->ref < 1)
     panic("fileclose");
-  if(f->type == FD_PIPE && f->ip->type == T_PIPE){
+  if(f->type == FD_FIFO){
     struct pipe* p = f->pipe;
     // If we are the last process using this end of the pipe,
     // wake up other processes on the other end, so that they
@@ -89,7 +89,7 @@ fileclose(struct file *f)
   // and if we were the last process that had the pipe open, set
   // read_file and write_file of our inode to 0, so that on the next
   // open of the FIFO we will create the pipe again.
-  if(ff.type == FD_PIPE && pipeclose(ff.pipe, ff.writable)){
+  if(ff.type == FD_FIFO && pipeclose(ff.pipe, ff.writable)){
     // Close another file that is opened for this pipe.
     ilock(ff.ip);
     f = (ff.writable ? ff.ip->read_file : ff.ip->write_file);
@@ -101,6 +101,8 @@ fileclose(struct file *f)
     ff.ip->read_file = 0;
     ff.ip->write_file = 0;
     iunlock(ff.ip);
+  } else if(ff.type == FD_PIPE){
+    pipeclose(ff.pipe, ff.writable);
   } else if(ff.type == FD_INODE){
     begin_trans();
     iput(ff.ip);
@@ -112,7 +114,7 @@ fileclose(struct file *f)
 int
 filestat(struct file *f, struct stat *st)
 {
-  if(f->type == FD_INODE || f->type == FD_PIPE){
+  if(f->type == FD_INODE || f->type == FD_FIFO){
     ilock(f->ip);
     stati(f->ip, st);
     iunlock(f->ip);
@@ -129,7 +131,7 @@ fileread(struct file *f, char *addr, int n)
 
   if(f->readable == 0)
     return -1;
-  if(f->type == FD_PIPE)
+  if(f->type == FD_PIPE || f->type == FD_FIFO)
     return piperead(f->pipe, addr, n);
   if(f->type == FD_INODE){
     ilock(f->ip);
@@ -150,7 +152,7 @@ filewrite(struct file *f, char *addr, int n)
 
   if(f->writable == 0)
     return -1;
-  if(f->type == FD_PIPE)
+  if(f->type == FD_PIPE || f->type == FD_FIFO)
     return pipewrite(f->pipe, addr, n);
   if(f->type == FD_INODE){
     // write a few blocks at a time to avoid exceeding
