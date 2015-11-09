@@ -317,6 +317,9 @@ sys_open(void)
     if((ip = namei(path)) == 0)
       return -1;
     ilock(ip);
+    if((ip->type != T_PIPE) && (omode & O_NONBLOCK)){
+      omode -= O_NONBLOCK;
+    }
     if(ip->type == T_DIR && omode != O_RDONLY){
       iunlockput(ip);
       return -1;
@@ -353,9 +356,15 @@ sys_open(void)
       ip->read_file->ref++;
     }
     iunlock(ip);
-    // Wait ’till another end of pipe is open
-    // Behaviour is just like if O_NONBLOCK is clear in
-    // POSIX-compliant open.
+    if(omode & O_NONBLOCK){
+      release(&p->lock);
+      if((omode & O_WRONLY) && p->readopen == 0){
+        return -1;
+      }
+      return fd;
+    }
+    // Wait ’till another end of pipe is open as POSIX requires to
+    // when O_NONBLOCK is clear.
     int *our_end_count = &p->readopen, *other_end_count = &p->writeopen;
     uint *our_wakeup = &p->nread, *other_wakeup = &p->nwrite;
     if(omode & O_WRONLY){
