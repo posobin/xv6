@@ -8,6 +8,7 @@
 #include "fs.h"
 #include "file.h"
 #include "pipe.h"
+#include "stat.h"
 
 struct devsw devsw[NDEV];
 struct {
@@ -60,7 +61,7 @@ fileclose(struct file *f)
   acquire(&ftable.lock);
   if(f->ref < 1)
     panic("fileclose");
-  if(f->type == FD_PIPE){
+  if(f->type == FD_PIPE && f->ip->type == T_PIPE){
     struct pipe* p = f->pipe;
     // If we are the last process using this end of the pipe,
     // wake up other processes on the other end, so that they
