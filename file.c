@@ -112,7 +112,7 @@ fileclose(struct file *f)
 int
 filestat(struct file *f, struct stat *st)
 {
-  if(f->type == FD_INODE){
+  if(f->type == FD_INODE || f->type == FD_PIPE){
     ilock(f->ip);
     stati(f->ip, st);
     iunlock(f->ip);

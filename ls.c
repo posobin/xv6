@@ -2,6 +2,7 @@
 #include "stat.h"
 #include "user.h"
 #include "fs.h"
+#include "fcntl.h"
 
 char*
 fmtname(char *path)
@@ -30,7 +31,7 @@ ls(char *path)
   struct dirent de;
   struct stat st;
   
-  if((fd = open(path, 0)) < 0){
+  if((fd = open(path, O_NONBLOCK)) < 0){
     printf(2, "ls: cannot open %s\n", path);
     return;
   }
