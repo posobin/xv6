@@ -209,8 +209,23 @@ sys_unlink(void)
     goto bad;
   }
   if(ip->type == T_PIPE && ip->read_file != 0){
-    kfree((char*)ip->read_file->pipe);
-    ip->read_file = ip->write_file = 0;
+    struct pipe* p = ip->read_file->pipe;
+    acquire(&p->lock);
+    p->is_deleted = 1;
+    while(p->readopen > 0 && !proc->killed) {
+      wakeup(&p->nread);
+      sleep(&p->nwrite, &p->lock);
+    }
+    while(p->writeopen > 0 && !proc->killed) {
+      wakeup(&p->nwrite);
+      sleep(&p->nread, &p->lock);
+    }
+    release(&p->lock);
+    // Because readopen and writeopen are both zeroes,
+    // this fileclose will also close ip->write_open.
+    iunlock(ip);
+    fileclose(ip->read_file);
+    ilock(ip);
   }
 
   memset(&de, 0, sizeof(de));
@@ -318,6 +333,8 @@ sys_open(void)
         iunlockput(ip);
         return -1;
       }
+      ip->read_file->ip = ip;
+      ip->write_file->ip = ip;
       ip->read_file->pipe->writeopen = 0;
       ip->read_file->pipe->readopen = 0;
     }
@@ -341,12 +358,24 @@ sys_open(void)
     // POSIX-compliant open.
     if(omode & O_WRONLY){
       while (p->readopen == 0){
+        if(p->is_deleted){
+          if(p->writeopen > 0) p->writeopen--;
+          wakeup(&p->nread);
+          release(&p->lock);
+          return -1;
+        }
         wakeup(&p->nread);
         sleep(&p->nwrite, &p->lock);
       }
       wakeup(&p->nread);
     } else {
       while (p->writeopen == 0){
+        if(p->is_deleted){
+          if(p->readopen > 0) p->readopen--;
+          wakeup(&p->nwrite);
+          release(&p->lock);
+          return -1;
+        }
         wakeup(&p->nwrite);
         sleep(&p->nread, &p->lock);
       }

@@ -9,4 +9,5 @@ struct pipe {
   uint nwrite;    // number of bytes written
   int readopen;   // read fd is still open
   int writeopen;  // write fd is still open
+  int is_deleted; // used only for FIFOs
 };

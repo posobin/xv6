@@ -22,6 +22,7 @@ pipealloc(struct file **f0, struct file **f1)
   p->writeopen = 1;
   p->nwrite = 0;
   p->nread = 0;
+  p->is_deleted = 0;
   initlock(&p->lock, "pipe");
   (*f0)->type = FD_PIPE;
   (*f0)->readable = 1;
@@ -77,7 +78,7 @@ pipewrite(struct pipe *p, char *addr, int n)
   acquire(&p->lock);
   for(i = 0; i < n; i++){
     while(p->nwrite == p->nread + PIPESIZE){  //DOC: pipewrite-full
-      if(p->readopen == 0 || proc->killed){
+      if(p->readopen == 0 || proc->killed || p->is_deleted){
         release(&p->lock);
         return -1;
       }
@@ -98,7 +99,7 @@ piperead(struct pipe *p, char *addr, int n)
 
   acquire(&p->lock);
   while(p->nread == p->nwrite && p->writeopen){  //DOC: pipe-empty
-    if(proc->killed){
+    if(proc->killed || p->is_deleted){
       release(&p->lock);
       return -1;
     }

@@ -66,13 +66,13 @@ fileclose(struct file *f)
     // wake up other processes on the other end, so that they
     // could act accordingly.
     acquire(&p->lock);
-    if(f->writable && --p->writeopen == 0){
+    if(f->writable && --p->writeopen <= 0){
+      if(p->writeopen < 0) p->writeopen = 0;
       wakeup(&p->nread);
-    } else if(!f->writable && --p->readopen == 0){
+    } else if(!f->writable && --p->readopen <= 0){
+      if(p->readopen < 0) p->readopen = 0;
       wakeup(&p->nwrite);
     }
-    if(p->writeopen < 0) p->writeopen = 0;
-    if(p->readopen < 0) p->readopen = 0;
     release(&p->lock);
   }
   if(--f->ref > 0){
@@ -85,12 +85,21 @@ fileclose(struct file *f)
   release(&ftable.lock);
   
   // Close our end of the pipe,
-  // and if we were the last process that had it open, set
+  // and if we were the last process that had the pipe open, set
   // read_file and write_file of our inode to 0, so that on the next
   // open of the FIFO we will create the pipe again.
   if(ff.type == FD_PIPE && pipeclose(ff.pipe, ff.writable)){
+    // Close another file that is opened for this pipe.
+    ilock(ff.ip);
+    f = (ff.writable ? ff.ip->read_file : ff.ip->write_file);
+    if(f){
+      acquire(&ftable.lock);
+      f->type = FD_NONE;
+      release(&ftable.lock);
+    }
     ff.ip->read_file = 0;
     ff.ip->write_file = 0;
+    iunlock(ff.ip);
   } else if(ff.type == FD_INODE){
     begin_trans();
     iput(ff.ip);

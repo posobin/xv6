@@ -247,6 +247,8 @@ iget(uint dev, uint inum)
   ip->inum = inum;
   ip->ref = 1;
   ip->flags = 0;
+  ip->read_file = 0;
+  ip->write_file = 0;
   release(&icache.lock);
 
   return ip;
