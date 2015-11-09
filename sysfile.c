@@ -356,31 +356,25 @@ sys_open(void)
     // Wait ’till another end of pipe is open
     // Behaviour is just like if O_NONBLOCK is clear in
     // POSIX-compliant open.
+    int *our_end_count = &p->readopen, *other_end_count = &p->writeopen;
+    uint *our_wakeup = &p->nread, *other_wakeup = &p->nwrite;
     if(omode & O_WRONLY){
-      while (p->readopen == 0){
-        if(p->is_deleted){
-          if(p->writeopen > 0) p->writeopen--;
-          wakeup(&p->nread);
-          release(&p->lock);
-          return -1;
-        }
-        wakeup(&p->nread);
-        sleep(&p->nwrite, &p->lock);
-      }
-      wakeup(&p->nread);
-    } else {
-      while (p->writeopen == 0){
-        if(p->is_deleted){
-          if(p->readopen > 0) p->readopen--;
-          wakeup(&p->nwrite);
-          release(&p->lock);
-          return -1;
-        }
-        wakeup(&p->nwrite);
-        sleep(&p->nread, &p->lock);
-      }
-      wakeup(&p->nwrite);
+      our_end_count = &p->writeopen;
+      other_end_count = &p->readopen;
+      our_wakeup = &p->nwrite;
+      other_wakeup = &p->nread;
     }
+    while (*other_end_count == 0){
+      if(p->is_deleted){
+        if(*our_end_count > 0) (*our_end_count)--;
+        wakeup(other_wakeup);
+        release(&p->lock);
+        return -1;
+      }
+      wakeup(other_wakeup);
+      sleep(our_wakeup, &p->lock);
+    }
+    wakeup(other_wakeup);
     release(&p->lock);
     return fd;
   }
