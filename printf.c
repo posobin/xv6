@@ -9,11 +9,11 @@ putc(int fd, char c)
 }
 
 static void
-printint(int fd, int xx, int base, int sgn)
+printint(int fd, int xx, int base, int sgn, int width, char padding_char)
 {
   static char digits[] = "0123456789ABCDEF";
   char buf[16];
-  int i, neg;
+  int i, neg, k;
   uint x;
 
   neg = 0;
@@ -30,6 +30,9 @@ printint(int fd, int xx, int base, int sgn)
   }while((x /= base) != 0);
   if(neg)
     buf[i++] = '-';
+  k = width;
+  while(--k >= i)
+    putc(fd, padding_char);
 
   while(--i >= 0)
     putc(fd, buf[i]);
@@ -54,11 +57,27 @@ printf(int fd, char *fmt, ...)
         putc(fd, c);
       }
     } else if(state == '%'){
+      char padding_char = ' ';
+      if(c == '0'){
+        padding_char = '0';
+        i++;
+        c = fmt[i] & 0xff;
+      }
+      int width = 0;
+      while('0' <= c && c <= '9'){
+        width *= 10;
+        width += c - '0';
+        i++;
+        c = fmt[i] & 0xff;
+      }
       if(c == 'd'){
-        printint(fd, *ap, 10, 1);
+        printint(fd, *ap, 10, 1, width, padding_char);
         ap++;
       } else if(c == 'x' || c == 'p'){
-        printint(fd, *ap, 16, 0);
+        printint(fd, *ap, 16, 0, width, padding_char);
+        ap++;
+      } else if(c == 'o'){
+        printint(fd, *ap, 8, 0, width, padding_char);
         ap++;
       } else if(c == 's'){
         s = (char*)*ap;
