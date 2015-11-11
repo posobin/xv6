@@ -22,6 +22,9 @@ struct inode {
   short nlink;
   uint size;
   uint addrs[NDIRECT+1];
+  uint uid;
+  uint gid;
+  uint mode;
 
   // Two files for pipe, used only when type == T_PIPE
   struct file *read_file, *write_file;

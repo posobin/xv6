@@ -13,10 +13,10 @@
 
 //#define static_assert(a, b) do { switch (0) case 0: case (a): ; } while (0)
 
-int nblocks = 985;
+int nblocks = 8124;
 int nlog = LOGSIZE;
 int ninodes = 200;
-int size = 1024;
+int size = 8192;
 
 int fsfd;
 struct superblock sb;
@@ -88,7 +88,7 @@ main(int argc, char *argv[])
   sb.ninodes = xint(ninodes);
   sb.nlog = xint(nlog);
 
-  bitblocks = size/(512*8) + 1;
+  bitblocks = size/(512*4) + 1;
   usedblocks = ninodes / IPB + 3 + bitblocks;
   freeblock = usedblocks;
 
