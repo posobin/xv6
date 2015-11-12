@@ -103,3 +103,13 @@ memmove(void *vdst, void *vsrc, int n)
     *dst++ = *src++;
   return vdst;
 }
+
+int
+strncmp(const char* str1, const char* str2, uint num)
+{
+  uint i = 0;
+  while (i + 1 < num && *str1 && *str2 && (*str1++ == *str2++)) {
+    i++;
+  }
+  return *str1 - *str2;
+}

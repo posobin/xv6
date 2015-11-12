@@ -252,7 +252,7 @@ bad:
 }
 
 static struct inode*
-create(char *path, short type, short major, short minor)
+get_file(char *path)
 {
   uint off;
   struct inode *ip, *dp;
@@ -264,6 +264,20 @@ create(char *path, short type, short major, short minor)
 
   if((ip = dirlookup(dp, name, &off)) != 0){
     iunlockput(dp);
+    return ip;
+  }
+
+  iunlockput(dp);
+  return 0;
+}
+
+static struct inode*
+create(char *path, short type, short major, short minor)
+{
+  struct inode *ip, *dp;
+  char name[DIRSIZ];
+
+  if((ip = get_file(path)) != 0){
     ilock(ip);
     if((type == T_FILE && ip->type == T_FILE) ||
         (type == T_FILE && ip->type == T_PIPE))
@@ -272,6 +286,9 @@ create(char *path, short type, short major, short minor)
     return 0;
   }
 
+  if((dp = nameiparent(path, name)) == 0)
+    return 0;
+  ilock(dp);
   if((ip = ialloc(dp->dev, type)) == 0)
     panic("create: ialloc");
 
@@ -301,13 +318,16 @@ int
 sys_open(void)
 {
   char *path;
-  int fd, omode;
+  int fd, omode, mode;
   struct file *f;
   struct inode *ip;
 
   if(argstr(0, &path) < 0 || argint(1, &omode) < 0)
     return -1;
-  if(omode & O_CREATE){
+  if(omode & O_CREATE && !get_file(path)){
+    if(argint(2, &mode) < 0)
+      return -1;
+    mode &= ~proc->umask;
     begin_trans();
     ip = create(path, T_FILE, 0, 0);
     commit_trans();
@@ -531,4 +551,15 @@ sys_pipe(void)
   fd[0] = fd0;
   fd[1] = fd1;
   return 0;
+}
+
+int
+sys_umask()
+{
+  int new_value, old_value;
+  if(argint(0, &new_value) < 0)
+    return -1;
+  old_value = proc->umask;
+  proc->umask = new_value;
+  return old_value;
 }

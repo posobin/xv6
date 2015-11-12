@@ -27,6 +27,7 @@ main(void)
       exit();
     }
     if(pid == 0){
+      umask(022);
       exec("sh", argv);
       printf(1, "init: exec sh failed\n");
       exit();

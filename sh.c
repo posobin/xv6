@@ -130,6 +130,24 @@ runcmd(struct cmd *cmd)
   exit();
 }
 
+int str_to_int(char* str, int base, int* result)
+{
+  int current = 0;
+  while (*str) {
+    int add = 0;
+    if ('0' <= *str && *str <= '9') add = *str - '0';
+    else if ('a' <= *str && *str <= 'z') add = *str - 'a' + 10;
+    else if ('A' <= *str && *str <= 'Z') add = *str - 'A' + 10;
+    else break;
+    if (add >= base) return -1;
+    current *= base;
+    current += add;
+    str++;
+  }
+  *result = current;
+  return 0;
+}
+
 int
 getcmd(char *buf, int nbuf)
 {
@@ -139,6 +157,13 @@ getcmd(char *buf, int nbuf)
   if(buf[0] == 0) // EOF
     return -1;
   return 0;
+}
+
+int count_leading_whitespaces(const char* str)
+{
+  int result = 0;
+  while (*str && str[result] == ' ') result++;
+  return result;
 }
 
 int
@@ -157,16 +182,35 @@ main(void)
   
   // Read and run input commands.
   while(getcmd(buf, sizeof(buf)) >= 0){
-    if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
+    int index = count_leading_whitespaces(buf);
+    if(strncmp(buf + index, "cd ", 3) == 0){
       // Clumsy but will have to do for now.
       // Chdir has no effect on the parent if run in the child.
-      buf[strlen(buf)-1] = 0;  // chop \n
-      if(chdir(buf+3) < 0)
-        printf(2, "cannot cd %s\n", buf+3);
+      index += 3;
+      index += count_leading_whitespaces(buf + index);
+      buf[strlen(buf) - 1] = 0;  // chop \n
+      if(chdir(buf + index) < 0)
+        printf(2, "cannot cd %s\n", buf + index);
+      continue;
+    } else if(strncmp(buf + index, "umask", 5) == 0) {
+      index += 5;
+      index += count_leading_whitespaces(buf + index);
+      if (*(buf + index) == '\n') {
+        uint mask = umask(0);
+        umask(mask);
+        printf(1, "%03o\n", mask);
+        continue;
+      }
+      int new_value;
+      if (str_to_int(buf + index, 8, &new_value) < 0) {
+        printf(2, "cannot parse new umask\n");
+        continue;
+      }
+      umask(new_value);
       continue;
     }
     if(fork1() == 0)
-      runcmd(parsecmd(buf));
+      runcmd(parsecmd(buf + index));
     wait();
   }
   exit();

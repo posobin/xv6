@@ -1,3 +1,5 @@
+#include "types.h"
+
 struct stat;
 
 // system calls
@@ -10,7 +12,7 @@ int read(int, void*, int);
 int close(int);
 int kill(int);
 int exec(char*, char**);
-int open(char*, int);
+int open(char*, int, ...);
 int mknod(char*, short, short);
 int unlink(char*);
 int fstat(int fd, struct stat*);
@@ -23,6 +25,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int umask(int);
 
 // ulib.c
 int stat(char*, struct stat*);
@@ -37,3 +40,4 @@ void* memset(void*, int, uint);
 void* malloc(uint);
 void free(void*);
 int atoi(const char*);
+int strncmp(const char*, const char*, uint num);
