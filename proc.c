@@ -98,6 +98,11 @@ userinit(void)
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
+  p->uid = 0;
+  p->euid = 0;
+  p->gid = 0;
+  p->egid = 0;
+  p->umask = 0;
 
   p->state = RUNNABLE;
 }
@@ -153,6 +158,12 @@ fork(void)
     if(proc->ofile[i])
       np->ofile[i] = filedup(proc->ofile[i]);
   np->cwd = idup(proc->cwd);
+
+  np->uid = proc->uid;
+  np->euid = proc->euid;
+  np->gid = proc->gid;
+  np->egid = proc->egid;
+  np->umask = proc->umask;
  
   pid = np->pid;
   np->state = RUNNABLE;
@@ -446,7 +457,7 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
+    cprintf("%d %s %s %d %d", p->pid, state, p->name, p->uid, p->gid);
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
