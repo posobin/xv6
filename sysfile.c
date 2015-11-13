@@ -271,20 +271,6 @@ get_file(char *path)
   return 0;
 }
 
-static int
-get_permissions(struct inode* ip)
-{
-  int access_mode;
-  if (proc->euid == ip->uid) {
-    access_mode = ((ip->mode >> 6) & 7);
-  } else if (proc->egid == ip->gid) {
-    access_mode = ((ip->mode >> 3) & 7);
-  } else {
-    access_mode = ((ip->mode) & 7);
-  }
-  return access_mode;
-}
-
 static struct inode*
 create(char *path, short type, short major, short minor, uint mode)
 {
@@ -303,7 +289,7 @@ create(char *path, short type, short major, short minor, uint mode)
   if((dp = nameiparent(path, name)) == 0)
     return 0;
   ilock(dp);
-  int permissions = get_permissions(dp);
+  int permissions = get_current_permissions(dp);
   if(proc->euid != 0 && !(permissions & 2)) {
     iunlock(dp);
     return 0;
@@ -367,7 +353,7 @@ sys_open(void)
       return -1;
     }
   }
-  int access_mode = get_permissions(ip);
+  int access_mode = get_current_permissions(ip);
   if (proc->euid != 0) {
     if ((omode & O_RDWR) || (omode & O_WRONLY)) {
       if (!(access_mode & 2)) return -1;

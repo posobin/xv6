@@ -34,6 +34,10 @@ _exec(char *path, char **argv, int current_depth)
   if((ip = namei(path)) == 0)
     return -1;
   ilock(ip);
+  if((!(get_current_permissions(ip) & 1)) && proc->euid != 0){
+    iunlock(ip);
+    return -1;
+  }
   pgdir = 0;
 
   // Check for shebang

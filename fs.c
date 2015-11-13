@@ -671,3 +671,18 @@ nameiparent(char *path, char *name)
 {
   return namex(path, 1, name);
 }
+
+// We suppose that ip is already locked.
+int
+get_current_permissions(struct inode* ip)
+{
+  int access_mode;
+  if (proc->euid == ip->uid) {
+    access_mode = ((ip->mode >> 6) & 7);
+  } else if (proc->egid == ip->gid) {
+    access_mode = ((ip->mode >> 3) & 7);
+  } else {
+    access_mode = ((ip->mode) & 7);
+  }
+  return access_mode;
+}
