@@ -272,7 +272,7 @@ get_file(char *path)
 }
 
 static struct inode*
-create(char *path, short type, short major, short minor)
+create(char *path, short type, short major, short minor, uint mode)
 {
   struct inode *ip, *dp;
   char name[DIRSIZ];
@@ -296,6 +296,9 @@ create(char *path, short type, short major, short minor)
   ip->major = major;
   ip->minor = minor;
   ip->nlink = 1;
+  ip->uid = proc->euid;
+  ip->gid = proc->egid;
+  ip->mode = (mode & (~(proc->umask)));
   iupdate(ip);
 
   if(type == T_DIR){  // Create . and .. entries.
@@ -327,9 +330,8 @@ sys_open(void)
   if(omode & O_CREATE && !get_file(path)){
     if(argint(2, &mode) < 0)
       return -1;
-    mode &= ~proc->umask;
     begin_trans();
-    ip = create(path, T_FILE, 0, 0);
+    ip = create(path, T_FILE, 0, 0, mode);
     commit_trans();
     if(ip == 0)
       return -1;
@@ -434,9 +436,13 @@ sys_mkdir(void)
 {
   char *path;
   struct inode *ip;
+  int mode;
+  if (argstr(0, &path) < 0 || argint(1, &mode) < 0){
+    return -1;
+  }
 
   begin_trans();
-  if(argstr(0, &path) < 0 || (ip = create(path, T_DIR, 0, 0)) == 0){
+  if((ip = create(path, T_DIR, 0, 0, mode)) == 0){
     commit_trans();
     return -1;
   }
@@ -452,12 +458,14 @@ sys_mknod(void)
   char *path;
   int len;
   int major, minor;
+  int mode;
   
   begin_trans();
   if((len=argstr(0, &path)) < 0 ||
      argint(1, &major) < 0 ||
      argint(2, &minor) < 0 ||
-     (ip = create(path, T_DEV, major, minor)) == 0){
+     argint(3, &mode) < 0 ||
+     (ip = create(path, T_DEV, major, minor, mode)) == 0){
     commit_trans();
     return -1;
   }
@@ -471,10 +479,12 @@ sys_mkfifo(void)
 {
   struct inode *ip;
   char* path;
+  int mode;
   int len;
   begin_trans();
   if((len = argstr(0, &path)) < 0 ||
-      (ip = create(path, T_PIPE, 0, 0)) == 0){
+      argint(1, &mode) < 0 ||
+      (ip = create(path, T_PIPE, 0, 0, mode)) == 0){
     commit_trans();
     return -1;
   }

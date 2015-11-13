@@ -11,7 +11,7 @@ main(int argc, char *argv[])
   }
 
   for (int i = 1; i < argc; ++i){
-    if(mkfifo(argv[i]) < 0){
+    if(mkfifo(argv[i], 0666) < 0){
       printf(2, "mkfifo: %s failed to create\n", argv[i]);
       break;
     }
