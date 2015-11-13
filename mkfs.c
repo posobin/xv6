@@ -4,7 +4,9 @@
 #include <string.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <sys/stat.h>
 
+typedef struct stat __st;
 #define stat xv6_stat  // avoid clash with host struct stat
 #include "types.h"
 #include "fs.h"
@@ -31,7 +33,7 @@ void wsect(uint, void*);
 void winode(uint, struct dinode*);
 void rinode(uint inum, struct dinode *ip);
 void rsect(uint sec, void *buf);
-uint ialloc(ushort type);
+uint ialloc(ushort type, int mode);
 void iappend(uint inum, void *p, int n);
 
 // convert to intel byte order
@@ -104,7 +106,7 @@ main(int argc, char *argv[])
   memmove(buf, &sb, sizeof(sb));
   wsect(1, buf);
 
-  rootino = ialloc(T_DIR);
+  rootino = ialloc(T_DIR, 0755);
   assert(rootino == ROOTINO);
 
   bzero(&de, sizeof(de));
@@ -124,6 +126,11 @@ main(int argc, char *argv[])
       perror(argv[i]);
       exit(1);
     }
+    __st status;
+    if(fstat(fd, &status) == -1){
+      perror("whwhwhw");
+      exit(1);
+    }
     
     // Skip leading _ in name when writing to file system.
     // The binaries are named _rm, _cat, etc. to keep the
@@ -132,7 +139,8 @@ main(int argc, char *argv[])
     if(argv[i][0] == '_')
       ++argv[i];
 
-    inum = ialloc(T_FILE);
+    printf("%o\n", status.st_mode);
+    inum = ialloc(0, status.st_mode);
 
     bzero(&de, sizeof(de));
     de.inum = xshort(inum);
@@ -216,14 +224,31 @@ rsect(uint sec, void *buf)
   }
 }
 
+int
+type_to_mode(short type)
+{
+  switch(type){
+    case T_DIR:
+      return 0040000;
+    case T_FILE:
+      return 0100000;
+    case T_DEV:
+      return 0020000;
+    case T_PIPE:
+      return 0010000;
+  }
+  return 0;
+}
+
 uint
-ialloc(ushort type)
+ialloc(ushort type, int mode)
 {
   uint inum = freeinode++;
   struct dinode din;
 
   bzero(&din, sizeof(din));
-  din.type = xshort(type);
+  din.type = xshort(-1);
+  din.mode = xint(type_to_mode(type) | mode);
   din.nlink = xshort(1);
   din.size = xint(0);
   winode(inum, &din);

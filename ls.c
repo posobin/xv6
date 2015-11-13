@@ -42,16 +42,15 @@ ls(char *path)
     return;
   }
   
-  switch(st.type){
-  case T_FILE:
+  if(S_ISREG(st.mode)){
     printf(1, "%s %d %d %d %03o %d %d\n", fmtname(path),
-        st.type, st.ino, st.size, st.mode, st.uid, st.gid);
-    break;
-  
-  case T_DIR:
+        (st.mode & S_IFMT) >> 12, st.ino, st.size, (st.mode & 0777),
+        st.uid, st.gid);
+  }
+
+  if(S_ISDIR(st.mode)){
     if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf){
       printf(1, "ls: path too long\n");
-      break;
     }
     strcpy(buf, path);
     p = buf+strlen(buf);
@@ -66,9 +65,9 @@ ls(char *path)
         continue;
       }
       printf(1, "%s %d %d %d %03o %d %d\n", fmtname(buf),
-          st.type, st.ino, st.size, st.mode, st.uid, st.gid);
+          (st.mode & S_IFMT) >> 12, st.ino, st.size,
+          (st.mode & 0777), st.uid, st.gid);
     }
-    break;
   }
   close(fd);
 }

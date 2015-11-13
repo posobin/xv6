@@ -127,7 +127,7 @@ sys_link(void)
   begin_trans();
 
   ilock(ip);
-  if(ip->type == T_DIR){
+  if(S_ISDIR(ip->mode)){
     iunlockput(ip);
     commit_trans();
     return -1;
@@ -204,11 +204,11 @@ sys_unlink(void)
 
   if(ip->nlink < 1)
     panic("unlink: nlink < 1");
-  if(ip->type == T_DIR && !isdirempty(ip)){
+  if(S_ISDIR(ip->mode) && !isdirempty(ip)){
     iunlockput(ip);
     goto bad;
   }
-  if(ip->type == T_PIPE && ip->read_file != 0){
+  if(S_ISFIFO(ip->mode) && ip->read_file != 0){
     struct pipe* p = ip->read_file->pipe;
     acquire(&p->lock);
     p->is_deleted = 1;
@@ -231,7 +231,7 @@ sys_unlink(void)
   memset(&de, 0, sizeof(de));
   if(writei(dp, (char*)&de, off, sizeof(de)) != sizeof(de))
     panic("unlink: writei");
-  if(ip->type == T_DIR){
+  if(S_ISDIR(ip->mode)){
     dp->nlink--;
     iupdate(dp);
   }
@@ -293,8 +293,8 @@ create(char *path, short type, short major, short minor, uint mode)
 
   if((ip = get_file(path)) != 0){
     ilock(ip);
-    if((type == T_FILE && ip->type == T_FILE) ||
-        (type == T_FILE && ip->type == T_PIPE))
+    if((type == T_FILE && S_ISREG(ip->mode)) ||
+        (type == T_FILE && S_ISFIFO(ip->mode)))
       return ip;
     iunlockput(ip);
     return 0;
@@ -318,6 +318,7 @@ create(char *path, short type, short major, short minor, uint mode)
   ip->uid = proc->euid;
   ip->gid = proc->egid;
   ip->mode = (mode & (~(proc->umask)));
+  ip->mode |= type_to_mode(type);
   iupdate(ip);
 
   if(type == T_DIR){  // Create . and .. entries.
@@ -358,10 +359,10 @@ sys_open(void)
     if((ip = namei(path)) == 0)
       return -1;
     ilock(ip);
-    if((ip->type != T_PIPE) && (omode & O_NONBLOCK)){
+    if(!S_ISFIFO(ip->mode) && (omode & O_NONBLOCK)){
       omode -= O_NONBLOCK;
     }
-    if(ip->type == T_DIR && omode != O_RDONLY){
+    if(S_ISDIR(ip->mode) && omode != O_RDONLY){
       iunlockput(ip);
       return -1;
     }
@@ -376,7 +377,7 @@ sys_open(void)
     }
   }
 
-  if(ip->type == T_PIPE){
+  if(S_ISFIFO(ip->mode)){
     if(omode & O_RDWR){ // POSIX leaves this case undefined
       iunlockput(ip);
       return -1;
@@ -531,7 +532,7 @@ sys_chdir(void)
   if(argstr(0, &path) < 0 || (ip = namei(path)) == 0)
     return -1;
   ilock(ip);
-  if(ip->type != T_DIR){
+  if(!S_ISDIR(ip->mode)){
     iunlockput(ip);
     return -1;
   }
@@ -597,7 +598,7 @@ sys_umask()
   int new_value, old_value;
   if(argint(0, &new_value) < 0)
     return -1;
-  old_value = proc->umask;
+  old_value = ((proc->umask) & 0777);
   proc->umask = new_value;
   return old_value;
 }

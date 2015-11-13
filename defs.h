@@ -50,6 +50,7 @@ struct inode*   nameiparent(char*, char*);
 int             readi(struct inode*, char*, uint, uint);
 void            stati(struct inode*, struct stat*);
 int             writei(struct inode*, char*, uint, uint);
+int             type_to_mode(short);
 
 // ide.c
 void            ideinit(void);

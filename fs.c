@@ -167,6 +167,22 @@ iinit(void)
   initlock(&icache.lock, "icache");
 }
 
+int
+type_to_mode(short type)
+{
+  switch(type){
+    case T_DIR:
+      return S_IFDIR;
+    case T_FILE:
+      return S_IFREG;
+    case T_DEV:
+      return S_IFCHR;
+    case T_PIPE:
+      return S_IFIFO;
+  }
+  return 0;
+}
+
 static struct inode* iget(uint dev, uint inum);
 
 //PAGEBREAK!
@@ -206,7 +222,6 @@ iupdate(struct inode *ip)
 
   bp = bread(ip->dev, IBLOCK(ip->inum));
   dip = (struct dinode*)bp->data + ip->inum%IPB;
-  dip->type = ip->type;
   dip->major = ip->major;
   dip->minor = ip->minor;
   dip->nlink = ip->nlink;
@@ -288,7 +303,6 @@ ilock(struct inode *ip)
   if(!(ip->flags & I_VALID)){
     bp = bread(ip->dev, IBLOCK(ip->inum));
     dip = (struct dinode*)bp->data + ip->inum%IPB;
-    ip->type = dip->type;
     ip->major = dip->major;
     ip->minor = dip->minor;
     ip->nlink = dip->nlink;
@@ -300,8 +314,6 @@ ilock(struct inode *ip)
     brelse(bp);
     ip->read_file = ip->write_file = 0;
     ip->flags |= I_VALID;
-    if(ip->type == 0)
-      panic("ilock: no type");
   }
 }
 
@@ -334,7 +346,7 @@ iput(struct inode *ip)
     ip->flags |= I_BUSY;
     release(&icache.lock);
     itrunc(ip);
-    ip->type = 0;
+    ip->mode = 0;
     iupdate(ip);
     acquire(&icache.lock);
     ip->flags = 0;
@@ -433,7 +445,6 @@ stati(struct inode *ip, struct stat *st)
 {
   st->dev = ip->dev;
   st->ino = ip->inum;
-  st->type = ip->type;
   st->nlink = ip->nlink;
   st->size = ip->size;
   st->uid = ip->uid;
@@ -449,7 +460,7 @@ readi(struct inode *ip, char *dst, uint off, uint n)
   uint tot, m;
   struct buf *bp;
 
-  if(ip->type == T_DEV){
+  if(S_ISCHR(ip->mode)){
     if(ip->major < 0 || ip->major >= NDEV || !devsw[ip->major].read)
       return -1;
     return devsw[ip->major].read(ip, dst, n);
@@ -477,7 +488,7 @@ writei(struct inode *ip, char *src, uint off, uint n)
   uint tot, m;
   struct buf *bp;
 
-  if(ip->type == T_DEV){
+  if(S_ISCHR(ip->mode)){
     if(ip->major < 0 || ip->major >= NDEV || !devsw[ip->major].write)
       return -1;
     return devsw[ip->major].write(ip, src, n);
@@ -520,7 +531,7 @@ dirlookup(struct inode *dp, char *name, uint *poff)
   uint off, inum;
   struct dirent de;
 
-  if(dp->type != T_DIR)
+  if(!S_ISDIR(dp->mode))
     panic("dirlookup not DIR");
 
   for(off = 0; off < dp->size; off += sizeof(de)){
@@ -625,7 +636,7 @@ namex(char *path, int nameiparent, char *name)
 
   while((path = skipelem(path, name)) != 0){
     ilock(ip);
-    if(ip->type != T_DIR){
+    if(!S_ISDIR(ip->mode)){
       iunlockput(ip);
       return 0;
     }
