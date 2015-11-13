@@ -161,8 +161,10 @@ fork(void)
 
   np->uid = proc->uid;
   np->euid = proc->euid;
+  np->suid = proc->suid;
   np->gid = proc->gid;
   np->egid = proc->egid;
+  np->sgid = proc->sgid;
   np->umask = proc->umask;
  
   pid = np->pid;

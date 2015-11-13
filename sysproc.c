@@ -88,3 +88,85 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int sys_setreuid(void)
+{
+  int ruid, euid;
+  if(argint(0, &ruid) < 0 || argint(1, &euid) < 0)
+    return -1;
+  int update_suid = 0;
+  if(ruid != -1)
+  {
+    update_suid = 1;
+    if(ruid != proc->euid &&
+        ruid != proc->uid &&
+        proc->euid != 0)
+      return -1;
+    proc->uid = ruid;
+  }
+  if(euid != -1)
+  {
+    if(euid != proc->euid &&
+        euid != proc->uid &&
+        euid != proc->suid &&
+        proc->euid != 0)
+      return -1;
+    if(proc->euid != euid)
+      update_suid = 1;
+    proc->euid = euid;
+  }
+  if(update_suid)
+    proc->suid = proc->euid;
+  return 0;
+}
+
+int sys_setregid(void)
+{
+  int rgid, egid;
+  if(argint(0, &rgid) < 0 || argint(1, &egid) < 0)
+    return -1;
+  int update_sgid = 0;
+  if(rgid != -1)
+  {
+    update_sgid = 1;
+    if(rgid != proc->egid &&
+        rgid != proc->gid &&
+        proc->egid != 0)
+      return -1;
+    proc->gid = rgid;
+  }
+  if(egid != -1)
+  {
+    if(egid != proc->egid &&
+        egid != proc->gid &&
+        egid != proc->sgid &&
+        proc->egid != 0)
+      return -1;
+    if(proc->egid != egid)
+      update_sgid = 1;
+    proc->egid = egid;
+  }
+  if(update_sgid)
+    proc->sgid = proc->egid;
+  return 0;
+}
+
+int sys_getuid(void)
+{
+  return proc->uid;
+}
+
+int sys_geteuid(void)
+{
+  return proc->euid;
+}
+
+int sys_getgid(void)
+{
+  return proc->gid;
+}
+
+int sys_getegid(void)
+{
+  return proc->egid;
+}

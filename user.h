@@ -26,6 +26,12 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int umask(int);
+int setreuid(int, int);
+int setregid(int, int);
+int getuid(void);
+int geteuid(void);
+int getgid(void);
+int getegid(void);
 
 // ulib.c
 int stat(char*, struct stat*);

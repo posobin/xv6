@@ -100,6 +100,12 @@ extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
 extern int sys_umask(void);
+extern int sys_setreuid(void);
+extern int sys_setregid(void);
+extern int sys_getuid(void);
+extern int sys_geteuid(void);
+extern int sys_getgid(void);
+extern int sys_getegid(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -125,6 +131,12 @@ static int (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_umask]   sys_umask,
+[SYS_setreuid] sys_setreuid,
+[SYS_setregid] sys_setregid,
+[SYS_getuid]  sys_getuid,
+[SYS_geteuid] sys_geteuid,
+[SYS_getgid]  sys_getgid,
+[SYS_getegid] sys_getegid,
 };
 
 void

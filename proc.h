@@ -67,9 +67,11 @@ struct proc {
   struct inode *cwd;           // Current directory
   uint uid;                    // User ID
   uint euid;                   // Effective user ID
+  uint suid;                   // setuid bit
   uint gid;                    // Group ID
   uint egid;                   // Effective group ID
   uint umask;                  // File mode creation mask
+  uint sgid;                   // setgid bit
   char name[16];               // Process name (debugging)
 };
 
