@@ -198,6 +198,9 @@ sys_unlink(void)
   if(namecmp(name, ".") == 0 || namecmp(name, "..") == 0)
     goto bad;
 
+  if((get_current_permissions(dp) & 3) != 3)
+    goto bad;
+
   if((ip = dirlookup(dp, name, &off)) == 0)
     goto bad;
   ilock(ip);

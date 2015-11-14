@@ -6,6 +6,9 @@
 #include "defs.h"
 #include "x86.h"
 #include "elf.h"
+#include "fs.h"
+#include "file.h"
+#include "stat.h"
 
 static int _exec(char* path, char **argv, int current_depth);
 
@@ -107,6 +110,12 @@ exit:
       goto bad;
     if(loaduvm(pgdir, (char*)ph.vaddr, ip, ph.off, ph.filesz) < 0)
       goto bad;
+  }
+  if((ip->mode & S_ISUID) == S_ISUID){
+    proc->suid = ip->uid;
+  }
+  if((ip->mode & S_ISGID) == S_ISGID){
+    proc->sgid = ip->gid;
   }
   iunlockput(ip);
   ip = 0;

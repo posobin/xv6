@@ -26,6 +26,8 @@ main(void)
       printf(1, "init: fork failed\n");
       exit();
     }
+    setreuid(1, 1);
+    setregid(1, 1);
     if(pid == 0){
       umask(022);
       exec("sh", argv);

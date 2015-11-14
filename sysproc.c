@@ -98,6 +98,10 @@ int sys_setreuid(void)
   if(ruid != -1)
   {
     update_suid = 1;
+    int old_euid = proc->euid;
+    int old_uid = proc->uid;
+    (void)old_euid;
+    (void)old_uid;
     if(ruid != proc->euid &&
         ruid != proc->uid &&
         proc->euid != 0)

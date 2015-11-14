@@ -47,3 +47,4 @@ void* malloc(uint);
 void free(void*);
 int atoi(const char*);
 int strncmp(const char*, const char*, uint num);
+char* strncpy(char *s, const char *t, int n);
