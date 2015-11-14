@@ -111,11 +111,13 @@ exit:
     if(loaduvm(pgdir, (char*)ph.vaddr, ip, ph.off, ph.filesz) < 0)
       goto bad;
   }
+  int new_euid = proc->euid;
+  int new_egid = proc->egid;
   if((ip->mode & S_ISUID) == S_ISUID){
-    proc->suid = ip->uid;
+    new_euid = ip->uid;
   }
   if((ip->mode & S_ISGID) == S_ISGID){
-    proc->sgid = ip->gid;
+    new_egid = ip->gid;
   }
   iunlockput(ip);
   ip = 0;
@@ -154,6 +156,14 @@ exit:
   safestrcpy(proc->name, last, sizeof(proc->name));
 
   // Commit to the user image.
+  proc->suid = proc->euid;
+  proc->sgid = proc->egid;
+  if (new_euid != proc->euid) {
+    proc->euid = new_euid;
+  }
+  if (new_egid != proc->egid) {
+    proc->egid = new_egid;
+  }
   oldpgdir = proc->pgdir;
   proc->pgdir = pgdir;
   proc->sz = sz;
