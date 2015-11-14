@@ -64,11 +64,6 @@ main(int argc, char** argv)
     exit();
   }
 
-  if (setreuid(-1, 0) < 0)
-  {
-    printf(2, "Cannot change euid\n");
-    exit();
-  }
   int fd = open("/passwd_file", O_RDONLY);
   if (fd < 0)
   {
@@ -99,8 +94,6 @@ main(int argc, char** argv)
       current->data->passwd[0] = 0;
     if (current->data->uid == uid)
       found = 1;
-
-    break;
   }
   close(fd);
   if (!found)

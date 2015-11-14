@@ -180,11 +180,12 @@ UPROGS=\
 	_helloworld\
 	_mkfifo\
 	_passwd\
+	_login\
 
 passwd_file:
-	echo 1: > passwd_file
+	echo 0: > passwd_file
+	echo 1: >> passwd_file
 	chmod 644 passwd_file
-	chmod u+s passwd_file
 
 fs.img: mkfs passwd_file README $(UPROGS)
 	./mkfs fs.img passwd_file README $(UPROGS)
