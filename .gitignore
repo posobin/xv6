@@ -13,4 +13,5 @@ initcode.out
 kernel
 kernelmemfs
 mkfs
+passwd_file
 .gdbinit

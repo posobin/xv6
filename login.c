@@ -2,6 +2,7 @@
 #include "user.h"
 #include "fcntl.h"
 #include "md5.h"
+#include "pwd.h"
 
 #define HASH_LENGTH 32
 
@@ -21,63 +22,38 @@ int
 main()
 {
   printf(1, "Login: ");
-  char uid_str[8];
-  char* tmp = uid_str;
-  uint length = getline(&tmp, 8, 0);
-  int uid = 0;
-  for (int i = 0; i < length; ++i)
-  {
-    uid *= 10;
-    uid += uid_str[i] - '0';
-  }
-  int fd = open("/passwd_file", O_RDONLY);
-  if (fd < 0)
-  {
-    printf(2, "Cannot open passwd_file for reading\n");
-    exit();
-  }
-  char ch;
+  char username[MAX_NAME_LENGTH + 1];
+  fgets(username, MAX_NAME_LENGTH + 1, 0);
+  username[strlen(username) - 1] = 0;
+  struct passwd* pass = getpwnam(username);
+  int ok = (pass == 0 ? 0 : 1);
 
   printf(1, "Password: ");
-  char password[32];
-  tmp = password;
-  length = getline(&tmp, 32, 0);
-  char password_hash[32];
-  getmd5(password, length, password_hash);
+  char password[MAX_PASSWD_LENGTH + 1];
+  fgets(password, MAX_PASSWD_LENGTH + 1, 0);
+  password[strlen(password) - 1] = 0;
 
-  while (read(fd, &ch, 1) > 0) {
-    int current_uid = ch - '0';;
-    while (read(fd, &ch, 1) > 0) {
-      if (ch == ':') break;
-      current_uid *= 10;
-      current_uid += ch - '0';
-    }
-    int index = 0;
-    char real_pass_hash[32];
-    while (read(fd, &ch, 1) > 0 && index < HASH_LENGTH) {
-      if (ch == '\n') break;
-      real_pass_hash[index++] = ch;
-    }
-    if (index < HASH_LENGTH)
-      real_pass_hash[0] = 0;
-    if (current_uid == uid)
-    {
-      if (!real_pass_hash[0]) // User has no password set
-        goto ok;
-      if (strncmp(password_hash, real_pass_hash, 32) != 0)
-        goto bad;
-ok:
-      umask(022);
-      char *argv[] = { "sh", 0 };
-      close(fd);
-      exec("sh", argv);
-      printf(1, "login: exec sh failed\n");
-      exit();
-    }
+  char password_hash[33];
+  getmd5(password, strlen(password), password_hash);
+  password_hash[32] = 0;
+
+  if (pass->pw_passwd[0] && strcmp(password_hash, pass->pw_passwd) != 0) {
+    ok = 0;
   }
 
-bad:
+  if (ok)
+  {
+    umask(022);
+    if (setreuid(pass->pw_uid, pass->pw_uid) < 0 ||
+        setregid(pass->pw_gid, pass->pw_gid)) {
+      printf(2, "login: could not change rights\n");
+      exit();
+    }
+    char *argv[] = { "sh", 0 };
+    exec("sh", argv);
+    printf(1, "login: exec sh failed\n");
+    exit();
+  }
   printf(2, "Login incorrect\n");
-  close(fd);
   exit();
 }

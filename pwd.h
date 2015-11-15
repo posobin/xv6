@@ -1,5 +1,6 @@
 #include "types.h"
 
+#define MAX_PASSWD_LENGTH 32
 #define MAX_NAME_LENGTH 32
 #define MAX_PASSWD_HASH_LENGTH 32
 #define MAX_GECOS_LENGTH 1024
@@ -24,5 +25,6 @@ struct passwd
 struct passwd* getpwnam(const char* name);
 struct passwd* getpwuid(uid_t uid);
 struct passwd* getpwent(void);
+int putpwent(struct passwd*, int fd);
 void setpwent(void);
 void endpwent(void);
