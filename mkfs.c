@@ -14,6 +14,7 @@ typedef struct stat __st;
 #include "param.h"
 
 //#define static_assert(a, b) do { switch (0) case 0: case (a): ; } while (0)
+#define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 
 int nblocks = 8124;
 int nlog = LOGSIZE;
@@ -33,7 +34,7 @@ void wsect(uint, void*);
 void winode(uint, struct dinode*);
 void rinode(uint inum, struct dinode *ip);
 void rsect(uint sec, void *buf);
-uint ialloc(ushort type, int mode);
+uint ialloc(ushort type, int mode, int uid, int gid);
 void iappend(uint inum, void *p, int n);
 
 // convert to intel byte order
@@ -58,6 +59,40 @@ xint(uint x)
   a[3] = x >> 24;
   return y;
 }
+
+struct disk_file
+{
+  const char* original_filename;
+  const char* xv6_filename;
+  int mode;
+  int uid;
+  int gid;
+};
+
+struct disk_file files[] =
+{
+  {"README",      "README",       S_IFREG | S_IRUGO | S_IWUSR, 0, 0},
+  {"passwd_file", "passwd_file",  S_IFREG | S_IRUGO | S_IWUSR, 0, 0},
+  {"_cat",        "cat",          S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_echo",       "echo",         S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_forktest",   "forktest",     S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_grep",       "grep",         S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_init",       "init",         S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_kill",       "kill",         S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_ln",         "ln",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_ls",         "ls",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_mkdir",      "mkdir",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_rm",         "rm",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_sh",         "sh",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_stressfs",   "stressfs",     S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_wc",         "wc",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_zombie",     "zombie",       S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_helloworld", "helloworld",   S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_mkfifo",     "mkfifo",       S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_passwd",     "passwd",       S_ISUID | S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_login",      "login",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_id",         "id",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+};
 
 int
 main(int argc, char *argv[])
@@ -106,7 +141,7 @@ main(int argc, char *argv[])
   memmove(buf, &sb, sizeof(sb));
   wsect(1, buf);
 
-  rootino = ialloc(T_DIR, 0755);
+  rootino = ialloc(T_DIR, 0755, 0, 0);
   assert(rootino == ROOTINO);
 
   bzero(&de, sizeof(de));
@@ -119,32 +154,19 @@ main(int argc, char *argv[])
   strcpy(de.name, "..");
   iappend(rootino, &de, sizeof(de));
 
-  for(i = 2; i < argc; i++){
-    assert(index(argv[i], '/') == 0);
+  for(i = 0; i < NELEM(files); i++){
+    /*assert(index(argv[i], '/') == 0);*/
 
-    if((fd = open(argv[i], 0)) < 0){
-      perror(argv[i]);
+    if((fd = open(files[i].original_filename, 0)) < 0){
+      perror(files[i].original_filename);
       exit(1);
     }
-    __st status;
-    if(fstat(fd, &status) == -1){
-      perror("whwhwhw");
-      exit(1);
-    }
-    
-    // Skip leading _ in name when writing to file system.
-    // The binaries are named _rm, _cat, etc. to keep the
-    // build operating system from trying to execute them
-    // in place of system binaries like rm and cat.
-    if(argv[i][0] == '_')
-      ++argv[i];
 
-    printf("%o\n", status.st_mode);
-    inum = ialloc(0, status.st_mode);
+    inum = ialloc(0, files[i].mode, files[i].uid, files[i].gid);
 
     bzero(&de, sizeof(de));
     de.inum = xshort(inum);
-    strncpy(de.name, argv[i], DIRSIZ);
+    strncpy(de.name, files[i].xv6_filename, DIRSIZ);
     iappend(rootino, &de, sizeof(de));
 
     while((cc = read(fd, buf, sizeof(buf))) > 0)
@@ -241,7 +263,7 @@ type_to_mode(short type)
 }
 
 uint
-ialloc(ushort type, int mode)
+ialloc(ushort type, int mode, int uid, int gid)
 {
   uint inum = freeinode++;
   struct dinode din;
@@ -251,6 +273,8 @@ ialloc(ushort type, int mode)
   din.mode = xint(type_to_mode(type) | mode);
   din.nlink = xshort(1);
   din.size = xint(0);
+  din.uid = uid;
+  din.gid = gid;
   winode(inum, &din);
   return inum;
 }
