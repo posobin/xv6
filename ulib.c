@@ -52,11 +52,17 @@ strchr(const char *s, char c)
 char*
 gets(char *buf, int max)
 {
-  int i, cc;
+  return fgets(buf, max, 0);
+}
+
+char*
+fgets(char* buf, int size, int fd)
+{
+  int i;
   char c;
 
-  for(i=0; i+1 < max; ){
-    cc = read(0, &c, 1);
+  for(i = 0; i + 1 < size;){
+    int cc = read(fd, &c, 1);
     if(cc < 1)
       break;
     buf[i++] = c;
