@@ -181,6 +181,7 @@ UPROGS=\
 	_mkfifo\
 	_passwd\
 	_login\
+	_id\
 
 passwd_file:
 	echo root::0:0:root:/:/sh > passwd_file
