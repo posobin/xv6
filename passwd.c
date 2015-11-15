@@ -46,6 +46,8 @@ main(int argc, char** argv)
 
     strcpy(new_node->data->pw_name, current_passwd->pw_name);
     strcpy(new_node->data->pw_passwd, current_passwd->pw_passwd);
+    new_node->data->pw_uid = current_passwd->pw_uid;
+    new_node->data->pw_gid = current_passwd->pw_gid;
     strcpy(new_node->data->pw_gecos, current_passwd->pw_gecos);
     strcpy(new_node->data->pw_dir, current_passwd->pw_dir);
     strcpy(new_node->data->pw_shell, current_passwd->pw_shell);
