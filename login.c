@@ -49,9 +49,9 @@ main()
       printf(2, "login: could not change rights\n");
       exit();
     }
-    char *argv[] = { "sh", 0 };
-    exec("sh", argv);
-    printf(1, "login: exec sh failed\n");
+    char *argv[] = { pass->pw_shell, 0 };
+    exec(pass->pw_shell, argv);
+    printf(1, "login: exec user shell failed\n");
     exit();
   }
   printf(2, "Login incorrect\n");

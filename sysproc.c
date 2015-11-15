@@ -95,18 +95,15 @@ int sys_setreuid(void)
   if(argint(0, &ruid) < 0 || argint(1, &euid) < 0)
     return -1;
   int update_suid = 0;
+  int new_uid = proc->uid, new_euid = proc->euid;
   if(ruid != -1)
   {
     update_suid = 1;
-    int old_euid = proc->euid;
-    int old_uid = proc->uid;
-    (void)old_euid;
-    (void)old_uid;
     if(ruid != proc->euid &&
         ruid != proc->uid &&
         proc->euid != 0)
       return -1;
-    proc->uid = ruid;
+    new_uid = ruid;
   }
   if(euid != -1)
   {
@@ -117,8 +114,10 @@ int sys_setreuid(void)
       return -1;
     if(proc->euid != euid)
       update_suid = 1;
-    proc->euid = euid;
+    new_euid = euid;
   }
+  proc->uid = new_uid;
+  proc->euid = new_euid;
   if(update_suid)
     proc->suid = proc->euid;
   return 0;
@@ -130,6 +129,7 @@ int sys_setregid(void)
   if(argint(0, &rgid) < 0 || argint(1, &egid) < 0)
     return -1;
   int update_sgid = 0;
+  int new_gid = proc->gid, new_egid = proc->egid;
   if(rgid != -1)
   {
     update_sgid = 1;
@@ -137,7 +137,7 @@ int sys_setregid(void)
         rgid != proc->gid &&
         proc->egid != 0)
       return -1;
-    proc->gid = rgid;
+    new_gid = rgid;
   }
   if(egid != -1)
   {
@@ -148,8 +148,10 @@ int sys_setregid(void)
       return -1;
     if(proc->egid != egid)
       update_sgid = 1;
-    proc->egid = egid;
+    new_egid = egid;
   }
+  proc->gid = new_gid;
+  proc->egid = new_egid;
   if(update_sgid)
     proc->sgid = proc->egid;
   return 0;

@@ -25,7 +25,7 @@ main(int argc, char** argv)
     printf(2, "Could not find such username or open the passwd file\n");
     exit();
   }
-  if (pass->pw_uid != getuid() && geteuid() != 0) {
+  if (pass->pw_uid != getuid() && getuid() != 0) {
     printf(2, "Permission denied\n");
     exit();
   }
