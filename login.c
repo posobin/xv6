@@ -37,7 +37,8 @@ main()
   getmd5(password, strlen(password), password_hash);
   password_hash[32] = 0;
 
-  if (pass->pw_passwd[0] && strcmp(password_hash, pass->pw_passwd) != 0) {
+  if (ok && pass->pw_passwd[0] &&
+      strcmp(password_hash, pass->pw_passwd) != 0) {
     ok = 0;
   }
 
