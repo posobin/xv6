@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "x86.h"
 #include "syscall.h"
+#include "errno.h"
 
 // User code makes a system call with INT T_SYSCALL.
 // System call number in %eax.
@@ -150,6 +151,6 @@ syscall(void)
   } else {
     cprintf("%d %s: unknown sys call %d\n",
             proc->pid, proc->name, num);
-    proc->tf->eax = -1;
+    proc->tf->eax = -ENOSYS;
   }
 }

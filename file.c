@@ -9,6 +9,7 @@
 #include "file.h"
 #include "pipe.h"
 #include "stat.h"
+#include "errno.h"
 
 struct devsw devsw[NDEV];
 struct {
@@ -114,13 +115,10 @@ fileclose(struct file *f)
 int
 filestat(struct file *f, struct stat *st)
 {
-  if(f->type == FD_INODE || f->type == FD_FIFO){
-    ilock(f->ip);
-    stati(f->ip, st);
-    iunlock(f->ip);
-    return 0;
-  }
-  return -1;
+  ilock(f->ip);
+  stati(f->ip, st);
+  iunlock(f->ip);
+  return 0;
 }
 
 // Read from file f.
@@ -130,7 +128,7 @@ fileread(struct file *f, char *addr, int n)
   int r;
 
   if(f->readable == 0)
-    return -1;
+    return -EBADF;
   if(f->type == FD_PIPE || f->type == FD_FIFO)
     return piperead(f->pipe, addr, n);
   if(f->type == FD_INODE){
@@ -151,7 +149,7 @@ filewrite(struct file *f, char *addr, int n)
   int r;
 
   if(f->writable == 0)
-    return -1;
+    return -EBADF;
   if(f->type == FD_PIPE || f->type == FD_FIFO)
     return pipewrite(f->pipe, addr, n);
   if(f->type == FD_INODE){
@@ -181,7 +179,7 @@ filewrite(struct file *f, char *addr, int n)
         panic("short filewrite");
       i += r;
     }
-    return i == n ? n : -1;
+    return i == n ? n : -EIO;
   }
   panic("filewrite");
 }

@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "errno.h"
 
 int
 sys_fork(void)
@@ -31,7 +32,7 @@ sys_kill(void)
   int pid;
 
   if(argint(0, &pid) < 0)
-    return -1;
+    return -EINVAL;
   return kill(pid);
 }
 
@@ -48,10 +49,10 @@ sys_sbrk(void)
   int n;
 
   if(argint(0, &n) < 0)
-    return -1;
+    return -EINVAL;
   addr = proc->sz;
   if(growproc(n) < 0)
-    return -1;
+    return -ENOMEM;
   return addr;
 }
 
@@ -62,7 +63,7 @@ sys_sleep(void)
   uint ticks0;
   
   if(argint(0, &n) < 0)
-    return -1;
+    return -EINVAL;
   acquire(&tickslock);
   ticks0 = ticks;
   while(ticks - ticks0 < n){
@@ -93,7 +94,7 @@ int sys_setreuid(void)
 {
   int ruid, euid;
   if(argint(0, &ruid) < 0 || argint(1, &euid) < 0)
-    return -1;
+    return -EINVAL;
   int update_suid = 0;
   int new_uid = proc->uid, new_euid = proc->euid;
   if(ruid != -1)
@@ -102,7 +103,7 @@ int sys_setreuid(void)
     if(ruid != proc->euid &&
         ruid != proc->uid &&
         proc->euid != 0)
-      return -1;
+      return -EPERM;
     new_uid = ruid;
   }
   if(euid != -1)
@@ -111,7 +112,7 @@ int sys_setreuid(void)
         euid != proc->uid &&
         euid != proc->suid &&
         proc->euid != 0)
-      return -1;
+      return -EPERM;
     if(proc->euid != euid)
       update_suid = 1;
     new_euid = euid;
@@ -127,7 +128,7 @@ int sys_setregid(void)
 {
   int rgid, egid;
   if(argint(0, &rgid) < 0 || argint(1, &egid) < 0)
-    return -1;
+    return -EINVAL;
   int update_sgid = 0;
   int new_gid = proc->gid, new_egid = proc->egid;
   if(rgid != -1)
@@ -136,7 +137,7 @@ int sys_setregid(void)
     if(rgid != proc->egid &&
         rgid != proc->gid &&
         proc->egid != 0)
-      return -1;
+      return -EPERM;
     new_gid = rgid;
   }
   if(egid != -1)
@@ -145,7 +146,7 @@ int sys_setregid(void)
         egid != proc->gid &&
         egid != proc->sgid &&
         proc->egid != 0)
-      return -1;
+      return -EPERM;
     if(proc->egid != egid)
       update_sgid = 1;
     new_egid = egid;

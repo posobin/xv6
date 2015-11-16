@@ -14,6 +14,7 @@
 #include "file.h"
 #include "fcntl.h"
 #include "pipe.h"
+#include "errno.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -57,9 +58,9 @@ sys_dup(void)
   int fd;
   
   if(argfd(0, 0, &f) < 0)
-    return -1;
+    return -EBADF;
   if((fd=fdalloc(f)) < 0)
-    return -1;
+    return -EMFILE;
   filedup(f);
   return fd;
 }
@@ -72,7 +73,7 @@ sys_read(void)
   char *p;
 
   if(argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argptr(1, &p, n) < 0)
-    return -1;
+    return -EINVAL;
   return fileread(f, p, n);
 }
 
@@ -83,8 +84,10 @@ sys_write(void)
   int n;
   char *p;
 
-  if(argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argptr(1, &p, n) < 0)
-    return -1;
+  if(argfd(0, 0, &f) < 0)
+    return -EBADF;
+  if(argint(2, &n) < 0 || argptr(1, &p, n) < 0)
+    return -EINVAL;
   return filewrite(f, p, n);
 }
 
@@ -95,7 +98,7 @@ sys_close(void)
   struct file *f;
   
   if(argfd(0, &fd, &f) < 0)
-    return -1;
+    return -EBADF;
   proc->ofile[fd] = 0;
   fileclose(f);
   return 0;
@@ -107,8 +110,10 @@ sys_fstat(void)
   struct file *f;
   struct stat *st;
   
-  if(argfd(0, 0, &f) < 0 || argptr(1, (void*)&st, sizeof(*st)) < 0)
-    return -1;
+  if(argfd(0, 0, &f) < 0)
+    return -EBADF;
+  if(argptr(1, (void*)&st, sizeof(*st)) < 0)
+    return -EINVAL;
   return filestat(f, st);
 }
 
@@ -120,9 +125,9 @@ sys_link(void)
   struct inode *dp, *ip;
 
   if(argstr(0, &old) < 0 || argstr(1, &new) < 0)
-    return -1;
+    return -EINVAL;
   if((ip = namei(old)) == 0)
-    return -1;
+    return -EACCES;
 
   begin_trans();
 
@@ -130,17 +135,26 @@ sys_link(void)
   if(S_ISDIR(ip->mode)){
     iunlockput(ip);
     commit_trans();
-    return -1;
+    return -EPERM;
   }
 
   ip->nlink++;
   iupdate(ip);
   iunlock(ip);
 
-  if((dp = nameiparent(new, name)) == 0)
+  int status = 0;
+  if((dp = nameiparent(new, name)) == 0) {
+    status = ENOENT;
     goto bad;
+  }
   ilock(dp);
-  if(dp->dev != ip->dev || dirlink(dp, name, ip->inum) < 0){
+  if(dp->dev != ip->dev) {
+    iunlockput(dp);
+    status = EXDEV;
+    goto bad;
+  }
+  if((status = dirlink(dp, name, ip->inum)) < 0) {
+    status = -status;
     iunlockput(dp);
     goto bad;
   }
@@ -157,7 +171,7 @@ bad:
   iupdate(ip);
   iunlockput(ip);
   commit_trans();
-  return -1;
+  return -status;
 }
 
 // Is the directory dp empty except for "." and ".." ?
@@ -186,29 +200,37 @@ sys_unlink(void)
   uint off;
 
   if(argstr(0, &path) < 0)
-    return -1;
+    return -EINVAL;
   if((dp = nameiparent(path, name)) == 0)
-    return -1;
+    return -ENOENT;
 
   begin_trans();
 
   ilock(dp);
 
+  int status;
   // Cannot unlink "." or "..".
-  if(namecmp(name, ".") == 0 || namecmp(name, "..") == 0)
+  if(namecmp(name, ".") == 0 || namecmp(name, "..") == 0) {
+    status = ENOTDIR;
     goto bad;
+  }
 
-  if((get_current_permissions(dp) & 3) != 3)
+  if((get_current_permissions(dp) & 3) != 3) {
+    status = EPERM;
     goto bad;
+  }
 
-  if((ip = dirlookup(dp, name, &off)) == 0)
+  if((ip = dirlookup(dp, name, &off)) == 0) {
+    status = ENOENT;
     goto bad;
+  }
   ilock(ip);
 
   if(ip->nlink < 1)
     panic("unlink: nlink < 1");
   if(S_ISDIR(ip->mode) && !isdirempty(ip)){
     iunlockput(ip);
+    status = ENOTEMPTY;
     goto bad;
   }
   if(S_ISFIFO(ip->mode) && ip->read_file != 0){
@@ -251,7 +273,7 @@ sys_unlink(void)
 bad:
   iunlockput(dp);
   commit_trans();
-  return -1;
+  return -status;
 }
 
 static struct inode*
@@ -335,46 +357,47 @@ sys_open(void)
   struct inode *ip;
 
   if(argstr(0, &path) < 0 || argint(1, &omode) < 0)
-    return -1;
+    return -EINVAL;
   if(omode & O_CREATE && !get_file(path)){
     if(argint(2, &mode) < 0)
-      return -1;
+      return -EINVAL;
     begin_trans();
     ip = create(path, T_FILE, 0, 0, mode);
     commit_trans();
     if(ip == 0)
-      return -1;
+      return -EACCES; // TODO separate different problems in create
   } else {
     if((ip = namei(path)) == 0)
-      return -1;
+      return -EACCES;
     ilock(ip);
     if(!S_ISFIFO(ip->mode) && (omode & O_NONBLOCK)){
       omode -= O_NONBLOCK;
     }
     if(S_ISDIR(ip->mode) && omode != O_RDONLY){
       iunlockput(ip);
-      return -1;
+      return -EISDIR;
     }
   }
   int access_mode = get_current_permissions(ip);
   if (proc->euid != 0) {
     if ((omode & O_RDWR) || (omode & O_WRONLY)) {
-      if (!(access_mode & 2)) return -1;
+      if (!(access_mode & 2)) return -EACCES;
     }
     if ((omode & O_RDWR) || !(omode & O_WRONLY)) {
-      if (!(access_mode & 4)) return -1;
+      if (!(access_mode & 4)) return -EACCES;
     }
   }
 
+  int status;
   if(S_ISFIFO(ip->mode)){
     if(omode & O_RDWR){ // POSIX leaves this case undefined
       iunlockput(ip);
       return -1;
     }
     if(ip->read_file == 0){ // Create pipe if it has not been already created
-      if(pipealloc(&ip->read_file, &ip->write_file) < 0){
+      if((status = pipealloc(&ip->read_file, &ip->write_file)) < 0){
         iunlockput(ip);
-        return -1;
+        return status;
       }
       ip->read_file->type = FD_FIFO;
       ip->write_file->type = FD_FIFO;
@@ -386,7 +409,7 @@ sys_open(void)
     if((!(omode & O_WRONLY) && ((fd = fdalloc(ip->read_file)) < 0)) ||
         ((omode & O_WRONLY) && ((fd = fdalloc(ip->write_file)) < 0))){
       iunlockput(ip);
-      return -1;
+      return -ENFILE;
     }
     struct pipe* p = ip->write_file->pipe;
     acquire(&p->lock);
@@ -401,7 +424,7 @@ sys_open(void)
     if(omode & O_NONBLOCK){
       if((omode & O_WRONLY) && p->readopen == 0){
         release(&p->lock);
-        return -1;
+        return -ENXIO;
       }
       if(omode & O_WRONLY) wakeup(&p->nread);
       else wakeup(&p->nwrite);
@@ -423,7 +446,7 @@ sys_open(void)
         if(*our_end_count > 0) (*our_end_count)--;
         wakeup(other_wakeup);
         release(&p->lock);
-        return -1;
+        return -ENOENT;
       }
       wakeup(other_wakeup);
       sleep(our_wakeup, &p->lock);
@@ -434,10 +457,14 @@ sys_open(void)
   }
 
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
-    if(f)
+    if(f) {
+      status = EMFILE;
       fileclose(f);
+    } else {
+      status = ENFILE;
+    }
     iunlockput(ip);
-    return -1;
+    return -status;
   }
   iunlock(ip);
 
@@ -456,13 +483,14 @@ sys_mkdir(void)
   struct inode *ip;
   int mode;
   if (argstr(0, &path) < 0 || argint(1, &mode) < 0){
-    return -1;
+    return -EINVAL;
   }
 
   begin_trans();
   if((ip = create(path, T_DIR, 0, 0, mode)) == 0){
     commit_trans();
-    return -1;
+    // TODO return different values depending on create’s result
+    return -EACCES;
   }
   iunlockput(ip);
   commit_trans();
@@ -479,13 +507,12 @@ sys_mknod(void)
   int mode;
   
   begin_trans();
-  if((len=argstr(0, &path)) < 0 ||
-     argint(1, &major) < 0 ||
-     argint(2, &minor) < 0 ||
-     argint(3, &mode) < 0 ||
-     (ip = create(path, T_DEV, major, minor, mode)) == 0){
+  if((len=argstr(0, &path)) < 0 || argint(1, &major) < 0 ||
+     argint(2, &minor) < 0 || argint(3, &mode) < 0)
+    return -EINVAL;
+  if((ip = create(path, T_DEV, major, minor, mode)) == 0){
     commit_trans();
-    return -1;
+    return -EACCES;
   }
   iunlockput(ip);
   commit_trans();
@@ -500,11 +527,11 @@ sys_mkfifo(void)
   int mode;
   int len;
   begin_trans();
-  if((len = argstr(0, &path)) < 0 ||
-      argint(1, &mode) < 0 ||
-      (ip = create(path, T_PIPE, 0, 0, mode)) == 0){
+  if((len = argstr(0, &path)) < 0 || argint(1, &mode) < 0)
+    return -EINVAL;
+  if((ip = create(path, T_PIPE, 0, 0, mode)) == 0){
     commit_trans();
-    return -1;
+    return -ENOENT;
   }
   ip->read_file = ip->write_file = 0;
   iunlockput(ip);
@@ -519,11 +546,11 @@ sys_chdir(void)
   struct inode *ip;
 
   if(argstr(0, &path) < 0 || (ip = namei(path)) == 0)
-    return -1;
+    return -EINVAL;
   ilock(ip);
   if(!S_ISDIR(ip->mode)){
     iunlockput(ip);
-    return -1;
+    return -ENOTDIR;
   }
   iunlock(ip);
   iput(proc->cwd);
@@ -539,20 +566,20 @@ sys_exec(void)
   uint uargv, uarg;
 
   if(argstr(0, &path) < 0 || argint(1, (int*)&uargv) < 0){
-    return -1;
+    return -EINVAL;
   }
   memset(argv, 0, sizeof(argv));
   for(i=0;; i++){
     if(i >= NELEM(argv))
-      return -1;
+      return -E2BIG;
     if(fetchint(uargv+4*i, (int*)&uarg) < 0)
-      return -1;
+      return -EINVAL;
     if(uarg == 0){
       argv[i] = 0;
       break;
     }
     if(fetchstr(uarg, &argv[i]) < 0)
-      return -1;
+      return -EINVAL;
   }
   return exec(path, argv, argv);
 }
@@ -564,17 +591,18 @@ sys_pipe(void)
   struct file *rf, *wf;
   int fd0, fd1;
 
+  int status;
   if(argptr(0, (void*)&fd, 2*sizeof(fd[0])) < 0)
-    return -1;
-  if(pipealloc(&rf, &wf) < 0)
-    return -1;
+    return -EINVAL;
+  if((status = pipealloc(&rf, &wf)) < 0)
+    return status;
   fd0 = -1;
   if((fd0 = fdalloc(rf)) < 0 || (fd1 = fdalloc(wf)) < 0){
     if(fd0 >= 0)
       proc->ofile[fd0] = 0;
     fileclose(rf);
     fileclose(wf);
-    return -1;
+    return -EMFILE;
   }
   fd[0] = fd0;
   fd[1] = fd1;
@@ -586,7 +614,7 @@ sys_umask()
 {
   int new_value, old_value;
   if(argint(0, &new_value) < 0)
-    return -1;
+    return -EINVAL;
   old_value = ((proc->umask) & 0777);
   proc->umask = new_value;
   return old_value;

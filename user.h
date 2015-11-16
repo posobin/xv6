@@ -3,6 +3,7 @@
 struct stat;
 
 char **environ;
+int errno;
 
 // system calls
 int fork(void);

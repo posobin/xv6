@@ -1,11 +1,21 @@
 #include "syscall.h"
 #include "traps.h"
+#include "errno.h"
 
+// Call system function and save errno
 #define SYSCALL(name) \
   .globl name; \
   name: \
     movl $SYS_ ## name, %eax; \
     int $T_SYSCALL; \
+    cmpl $0, %eax; \
+    jge ok_ ## name ; \
+    cmpl $-128, %eax; \
+    jl ok_ ## name ; \
+    movl $0, errno; \
+    subl %eax, errno; \
+    movl $-1, %eax; \
+  ok_ ## name : \
     ret
 
 SYSCALL(fork)

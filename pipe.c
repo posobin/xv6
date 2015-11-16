@@ -6,6 +6,7 @@
 #include "fs.h"
 #include "file.h"
 #include "pipe.h"
+#include "errno.h"
 
 int
 pipealloc(struct file **f0, struct file **f1)
@@ -14,10 +15,15 @@ pipealloc(struct file **f0, struct file **f1)
 
   p = 0;
   *f0 = *f1 = 0;
-  if((*f0 = filealloc()) == 0 || (*f1 = filealloc()) == 0)
+  int status;
+  if((*f0 = filealloc()) == 0 || (*f1 = filealloc()) == 0) {
+    status = EMFILE;
     goto bad;
-  if((p = (struct pipe*)kalloc()) == 0)
+  }
+  if((p = (struct pipe*)kalloc()) == 0) {
+    status = ENOMEM;
     goto bad;
+  }
   p->readopen = 1;
   p->writeopen = 1;
   p->nwrite = 0;
@@ -42,7 +48,7 @@ pipealloc(struct file **f0, struct file **f1)
     fileclose(*f0);
   if(*f1)
     fileclose(*f1);
-  return -1;
+  return -status;
 }
 
 // Closes pipe and returns 0 if at least one of the ends of the
@@ -101,7 +107,7 @@ piperead(struct pipe *p, char *addr, int n)
   while(p->nread == p->nwrite && p->writeopen){  //DOC: pipe-empty
     if(proc->killed || p->is_deleted){
       release(&p->lock);
-      return -1;
+      return -EBADF;
     }
     sleep(&p->nread, &p->lock); //DOC: piperead-sleep
   }
