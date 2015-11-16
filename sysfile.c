@@ -554,7 +554,7 @@ sys_exec(void)
     if(fetchstr(uarg, &argv[i]) < 0)
       return -1;
   }
-  return exec(path, argv);
+  return exec(path, argv, argv);
 }
 
 int

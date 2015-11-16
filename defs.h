@@ -21,7 +21,7 @@ void            consoleintr(int(*)(void));
 void            panic(char*) __attribute__((noreturn));
 
 // exec.c
-int             exec(char*, char**);
+int             exec(char*, char**, char**);
 
 // file.c
 struct file*    filealloc(void);

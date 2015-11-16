@@ -10,20 +10,20 @@
 #include "file.h"
 #include "stat.h"
 
-static int _exec(char* path, char **argv, int current_depth);
+static int _exec(char* path, char **argv, char **envp, int current_depth);
 
 int
-exec(char *path, char **argv)
+exec(char *path, char **argv, char **envp)
 {
-  return _exec(path, argv, 5);
+  return _exec(path, argv, envp, 5);
 }
 
 static int
-_exec(char *path, char **argv, int current_depth)
+_exec(char *path, char **argv, char **envp, int current_depth)
 {
   char *s, *last;
   int i, j, off, st, linelen;
-  uint argc, sz, sp, ustack[3+MAXARG+1];
+  uint argc, sz, sp, ustack[4+MAXARG+1+MAXARG+1];
   struct elfhdr elf;
   struct inode *ip;
   struct proghdr ph;
@@ -83,7 +83,7 @@ _exec(char *path, char **argv, int current_depth)
       goto exit;
     }
     args[++argc] = 0;
-    st = _exec(args[0], args, current_depth);
+    st = _exec(args[0], args, envp, current_depth);
 exit:
     kfree(progpath);
     return st;
@@ -137,16 +137,32 @@ exit:
     sp = (sp - (strlen(argv[argc]) + 1)) & ~3;
     if(copyout(pgdir, sp, argv[argc], strlen(argv[argc]) + 1) < 0)
       goto bad;
-    ustack[3+argc] = sp;
+    ustack[1+argc] = sp;
   }
-  ustack[3+argc] = 0;
+  ustack[1+argc] = 0;
 
-  ustack[0] = 0xffffffff;  // fake return PC
-  ustack[1] = argc;
-  ustack[2] = sp - (argc+1)*4;  // argv pointer
+  int envp_counter = 0;
+  for(envp_counter = 0; envp[envp_counter]; envp_counter++) {
+    if(envp_counter >= MAXARG)
+      goto bad;
+    sp = (sp - (strlen(envp[envp_counter]) + 1)) & ~3;
+    if(copyout(pgdir, sp, envp[envp_counter],
+          strlen(envp[envp_counter]) + 1) < 0)
+      goto bad;
+    ustack[2+envp_counter+argc] = sp;
+  }
+  ustack[2+argc+envp_counter] = 0;
 
-  sp -= (3+argc+1) * 4;
-  if(copyout(pgdir, sp, ustack, (3+argc+1)*4) < 0)
+  /*int argv_pointer = sp - (envp_counter + argc + 2) * 4;*/
+  /*int envp_pointer = sp - (envp_counter + 1) * 4;*/
+
+  /*ustack[0] = 0xffffffff;  // fake return PC*/
+  ustack[0] = argc;
+  /*ustack[2] = 3;*/
+  /*ustack[2] = envp_pointer;*/
+
+  sp -= (1+argc+1+envp_counter+1) * 4;
+  if(copyout(pgdir, sp, ustack, (1+argc+1+envp_counter+1)*4) < 0)
     goto bad;
 
   // Save program name for debugging.

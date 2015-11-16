@@ -4,6 +4,8 @@
 #include "user.h"
 #include "x86.h"
 
+char **environ = 0;
+
 char*
 strcpy(char *s, char *t)
 {
