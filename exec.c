@@ -9,6 +9,7 @@
 #include "fs.h"
 #include "file.h"
 #include "stat.h"
+#include "errno.h"
 
 static int _exec(char* path, char **argv, char **envp, int current_depth);
 
@@ -32,20 +33,22 @@ _exec(char *path, char **argv, char **envp, int current_depth)
   char* progpath;
   char tmp[2];
   if(--current_depth < 0)
-    return -1;
+    return -ELOOP;
 
   if((ip = namei(path)) == 0)
-    return -1;
+    return -ENOENT;
   ilock(ip);
   if((!(get_current_permissions(ip) & 1)) && proc->euid != 0){
     iunlock(ip);
-    return -1;
+    return -EACCES;
   }
   pgdir = 0;
 
   // Check for shebang
-  if(readi(ip, tmp, 0, 2) < sizeof(tmp))
+  if(readi(ip, tmp, 0, 2) < sizeof(tmp)) {
+    st = -EACCES;
     goto bad;
+  }
   if(tmp[0] == '#' && tmp[1] == '!'){
     progpath = kalloc();
     i = readi(ip, progpath, 2, PGSIZE);
@@ -58,7 +61,7 @@ _exec(char *path, char **argv, char **envp, int current_depth)
         progpath[j] != '\t' && progpath[j] != '\n'; ++j)
       ;
     if(j == PGSIZE){
-      st = -1;
+      st = -E2BIG;
       goto exit;
     }
     argc = 0;
@@ -70,7 +73,7 @@ _exec(char *path, char **argv, char **envp, int current_depth)
         args[++argc] = progpath + linelen;
     }
     if(argc >= MAXARG || linelen >= i){
-      st = -1;
+      st = -E2BIG;
       goto exit;
     }
     progpath[linelen] = 0;
@@ -79,7 +82,7 @@ _exec(char *path, char **argv, char **envp, int current_depth)
       args[++argc] = argv[i];
 
     if(argc >= MAXARG){
-      st = -1;
+      st = -E2BIG;
       goto exit;
     }
     args[++argc] = 0;
@@ -89,27 +92,41 @@ exit:
     return st;
   }
   // Check ELF header
-  if(readi(ip, (char*)&elf, 0, sizeof(elf)) < sizeof(elf))
+  if(readi(ip, (char*)&elf, 0, sizeof(elf)) < sizeof(elf)) {
+    st = -ENOEXEC;
     goto bad;
-  if(elf.magic != ELF_MAGIC)
+  }
+  if(elf.magic != ELF_MAGIC) {
+    st = -ENOEXEC;
     goto bad;
+  }
 
-  if((pgdir = setupkvm()) == 0)
+  if((pgdir = setupkvm()) == 0) {
+    st = -ENOMEM;
     goto bad;
+  }
 
   // Load program into memory.
   sz = 0;
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
-    if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
+    if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph)) {
+      st = -EIO;
       goto bad;
+    }
     if(ph.type != ELF_PROG_LOAD)
       continue;
-    if(ph.memsz < ph.filesz)
+    if(ph.memsz < ph.filesz) {
+      st = -E2BIG;
       goto bad;
-    if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0)
+    }
+    if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0) {
+      st = -ENOMEM;
       goto bad;
-    if(loaduvm(pgdir, (char*)ph.vaddr, ip, ph.off, ph.filesz) < 0)
+    }
+    if(loaduvm(pgdir, (char*)ph.vaddr, ip, ph.off, ph.filesz) < 0) {
+      st = -ENOMEM;
       goto bad;
+    }
   }
   int new_euid = proc->euid;
   int new_egid = proc->egid;
@@ -125,45 +142,51 @@ exit:
   // Allocate two pages at the next page boundary.
   // Make the first inaccessible.  Use the second as the user stack.
   sz = PGROUNDUP(sz);
-  if((sz = allocuvm(pgdir, sz, sz + 2*PGSIZE)) == 0)
+  if((sz = allocuvm(pgdir, sz, sz + 2*PGSIZE)) == 0) {
+    st = -ENOMEM;
     goto bad;
+  }
   clearpteu(pgdir, (char*)(sz - 2*PGSIZE));
   sp = sz;
 
   // Push argument strings, prepare rest of stack in ustack.
   for(argc = 0; argv[argc]; argc++) {
-    if(argc >= MAXARG)
+    if(argc >= MAXARG) {
+      st = -E2BIG;
       goto bad;
+    }
     sp = (sp - (strlen(argv[argc]) + 1)) & ~3;
-    if(copyout(pgdir, sp, argv[argc], strlen(argv[argc]) + 1) < 0)
+    if(copyout(pgdir, sp, argv[argc], strlen(argv[argc]) + 1) < 0) {
+      st = -ENOMEM;
       goto bad;
+    }
     ustack[1+argc] = sp;
   }
   ustack[1+argc] = 0;
 
   int envp_counter = 0;
   for(envp_counter = 0; envp[envp_counter]; envp_counter++) {
-    if(envp_counter >= MAXARG)
+    if(envp_counter >= MAXARG) {
+      st = -E2BIG;
       goto bad;
+    }
     sp = (sp - (strlen(envp[envp_counter]) + 1)) & ~3;
     if(copyout(pgdir, sp, envp[envp_counter],
-          strlen(envp[envp_counter]) + 1) < 0)
+          strlen(envp[envp_counter]) + 1) < 0) {
+      st = -ENOMEM;
       goto bad;
+    }
     ustack[2+envp_counter+argc] = sp;
   }
   ustack[2+argc+envp_counter] = 0;
 
-  /*int argv_pointer = sp - (envp_counter + argc + 2) * 4;*/
-  /*int envp_pointer = sp - (envp_counter + 1) * 4;*/
-
-  /*ustack[0] = 0xffffffff;  // fake return PC*/
   ustack[0] = argc;
-  /*ustack[2] = 3;*/
-  /*ustack[2] = envp_pointer;*/
 
   sp -= (1+argc+1+envp_counter+1) * 4;
-  if(copyout(pgdir, sp, ustack, (1+argc+1+envp_counter+1)*4) < 0)
+  if(copyout(pgdir, sp, ustack, (1+argc+1+envp_counter+1)*4) < 0) {
+    st = -ENOMEM;
     goto bad;
+  }
 
   // Save program name for debugging.
   for(last=s=path; *s; s++)
@@ -194,5 +217,5 @@ exit:
     freevm(pgdir);
   if(ip)
     iunlockput(ip);
-  return -1;
+  return st;
 }

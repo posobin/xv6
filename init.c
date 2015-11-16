@@ -6,6 +6,7 @@
 #include "fcntl.h"
 
 char *argv[] = { "login", 0 };
+char *envp[] = { "PATH=/", 0 };
 
 int
 main(void)
@@ -28,7 +29,7 @@ main(void)
     }
     if(pid == 0){
       umask(022);
-      exec("login", argv);
+      execve("login", argv, envp);
       printf(1, "init: exec login failed\n");
       exit();
     }
