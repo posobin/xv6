@@ -26,7 +26,7 @@ strcmp(const char *p, const char *q)
 }
 
 uint
-strlen(char *s)
+strlen(const char *s)
 {
   int n;
 
@@ -133,4 +133,44 @@ strncpy(char *s, const char *t, int n)
   while(n-- > 0)
     *s++ = 0;
   return os;
+}
+
+char*
+strrchr(const char *s, int c)
+{
+  char *p = (char*)s;
+  char *result = 0;
+  while (*p) {
+    if (*p == c) {
+      result = p;
+    }
+    p++;
+  }
+  if (*p == c) return p;
+  return result;
+}
+
+char*
+strchrnul(const char* s, int c)
+{
+  char *p = (char*)s;
+  while (*p && *p != c) {
+    p++;
+  }
+  return p;
+}
+
+char*
+getenv(const char *name)
+{
+  int length = strlen(name);
+  for (int i = 0; environ[i]; ++i)
+  {
+    if (strncmp(environ[i], name, length) == 0 &&
+        environ[i][length] == '=')
+    {
+      return environ[i] + length + 1;
+    }
+  }
+  return 0;
 }
