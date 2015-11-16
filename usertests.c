@@ -214,7 +214,7 @@ exectest(void)
   close(fd);
 
   emptyargv[0] = rec_test_fname;
-  if(exec(rec_test_fname, emptyargv) != -1){
+  if(execve(rec_test_fname, emptyargv, environ) != -1){
     printf(stdout, "error: recursive exec has not failed\
         (which is a failure)\n");
     exit();
@@ -244,7 +244,7 @@ exectest(void)
   pid = fork();
   if(pid==0){
     emptyargv[0] = rec_test_fname2;
-    exec(rec_test_fname2, emptyargv);
+    execve(rec_test_fname2, emptyargv, environ);
     close(open("exec-failed", O_CREATE, 0666));
     exit();
   } else if(pid < 0){
@@ -263,7 +263,7 @@ exectest(void)
   unlink(rec_test_fname);
   unlink(rec_test_fname2);
 
-  if(exec("echo", echoargv) < 0){
+  if(execve("echo", echoargv, environ) < 0){
     printf(stdout, "exec echo failed\n");
     exit();
   }
@@ -1595,7 +1595,7 @@ bigargtest(void)
       args[i] = "bigargs test: failed\n                                                                                                                                                                                                       ";
     args[MAXARG-1] = 0;
     printf(stdout, "bigarg test\n");
-    exec("echo", args);
+    execve("echo", args, environ);
     printf(stdout, "bigarg test ok\n");
     fd = open("bigarg-ok", O_CREATE, 0666);
     close(fd);

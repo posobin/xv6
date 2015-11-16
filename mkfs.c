@@ -92,6 +92,7 @@ struct disk_file files[] =
   {"_passwd",     "passwd",       S_ISUID | S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_login",      "login",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_id",         "id",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"",            "hha",          S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
 };
 
 int
@@ -155,9 +156,8 @@ main(int argc, char *argv[])
   iappend(rootino, &de, sizeof(de));
 
   for(i = 0; i < NELEM(files); i++){
-    /*assert(index(argv[i], '/') == 0);*/
-
-    if((fd = open(files[i].original_filename, 0)) < 0){
+    if((fd = open(files[i].original_filename, 0)) < 0 &&
+        strlen(files[i].original_filename) > 0){
       perror(files[i].original_filename);
       exit(1);
     }
@@ -169,10 +169,23 @@ main(int argc, char *argv[])
     strncpy(de.name, files[i].xv6_filename, DIRSIZ);
     iappend(rootino, &de, sizeof(de));
 
-    while((cc = read(fd, buf, sizeof(buf))) > 0)
-      iappend(inum, buf, cc);
+    if (S_ISDIR(files[i].mode)) {
+      bzero(&de, sizeof(de));
+      de.inum = xshort(inum);
+      strcpy(de.name, ".");
+      iappend(inum, &de, sizeof(de));
 
-    close(fd);
+      bzero(&de, sizeof(de));
+      de.inum = xshort(rootino);
+      strcpy(de.name, "..");
+      iappend(inum, &de, sizeof(de));
+    }
+
+    if (strlen(files[i].original_filename) != 0) {
+      while((cc = read(fd, buf, sizeof(buf))) > 0)
+        iappend(inum, buf, cc);
+      close(fd);
+    }
   }
 
   // fix size of root inode dir

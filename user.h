@@ -14,7 +14,7 @@ int write(int, void*, int);
 int read(int, void*, int);
 int close(int);
 int kill(int);
-int exec(char*, char**);
+int execve(char*, char**, char**);
 int open(char*, int, ...);
 int mknod(char*, short, short, int);
 int unlink(char*);
