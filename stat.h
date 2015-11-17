@@ -48,6 +48,9 @@
 #define S_IWUGO		(S_IWUSR|S_IWGRP|S_IWOTH)
 #define S_IXUGO		(S_IXUSR|S_IXGRP|S_IXOTH)
 
+#ifndef STAT_H_
+#define STAT_H_
+
 struct stat {
   int dev;     // File system's disk device
   uint ino;    // Inode number
@@ -57,3 +60,5 @@ struct stat {
   uint uid;    // File owner ID
   uint gid;    // File group ID
 };
+
+#endif
