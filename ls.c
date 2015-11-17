@@ -3,6 +3,8 @@
 #include "user.h"
 #include "fs.h"
 #include "fcntl.h"
+#include "pwd.h"
+#include "grp.h"
 
 char*
 fmtname(char *path)
@@ -43,9 +45,15 @@ ls(char *path)
   }
   
   if(S_ISREG(st.mode)){
-    printf(1, "%s %d %d %d %03o %d %d\n", fmtname(path),
+    printf(1, "%s %d %d %d %03o ", fmtname(path),
         (st.mode & S_IFMT) >> 12, st.ino, st.size, (st.mode & 0777),
         st.uid, st.gid);
+    struct passwd* passwd = getpwuid(st.uid);
+    if (passwd) printf(1, "%s ", passwd->pw_name);
+    else printf(1, "%d ", st.uid);
+    struct group* group = getgrgid(st.gid);
+    if (group) printf(1, "%s\n", group->gr_name);
+    else printf(1, "%d\n", st.gid);
   }
 
   if(S_ISDIR(st.mode)){
@@ -64,9 +72,15 @@ ls(char *path)
         printf(1, "ls: cannot stat %s\n", buf);
         continue;
       }
-      printf(1, "%s %d %d %d %03o %d %d\n", fmtname(buf),
+      printf(1, "%s %d %d %d %03o ", fmtname(buf),
           (st.mode & S_IFMT) >> 12, st.ino, st.size,
           (st.mode & 0777), st.uid, st.gid);
+      struct passwd* passwd = getpwuid(st.uid);
+      if (passwd) printf(1, "%s ", passwd->pw_name);
+      else printf(1, "%d ", st.uid);
+      struct group* group = getgrgid(st.gid);
+      if (group) printf(1, "%s\n", group->gr_name);
+      else printf(1, "%d\n", st.gid);
     }
   }
   close(fd);

@@ -133,7 +133,8 @@ tags: $(OBJS) entryother.S _init
 vectors.S: vectors.pl
 	perl vectors.pl > vectors.S
 
-ULIB = ulib.o usys.o printf.o umalloc.o md5.o pwd.o crt0.o libc-start.o uexec.o
+ULIB = ulib.o usys.o printf.o umalloc.o md5.o pwd.o crt0.o libc-start.o uexec.o\
+	   grp.o
 
 _%: %.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e _start -Ttext 0 -o $@ $^
@@ -183,9 +184,12 @@ UPROGS=\
 passwd_file:
 	echo root::0:0:root:/root:/bin/sh > passwd_file
 	echo user::1:1:user:/home/user:/bin/sh >> passwd_file
-	chmod 644 passwd_file
 
-fs.img: mkfs passwd_file README $(UPROGS)
+group_file:
+	echo root::0:root > group_file
+	echo user::1:user >> group_file
+
+fs.img: mkfs passwd_file group_file README $(UPROGS)
 	./mkfs fs.img passwd_file README $(UPROGS)
 
 -include *.d
@@ -194,7 +198,7 @@ clean:
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
 	*.o *.d *.asm *.sym vectors.S bootblock entryother \
 	initcode initcode.out kernel xv6.img fs.img kernelmemfs mkfs passwd_file \
-	.gdbinit \
+	group_file .gdbinit \
 	$(UPROGS)
 
 # make a printout

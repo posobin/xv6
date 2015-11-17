@@ -3,17 +3,17 @@
 #include "user.h"
 
 static struct passwd current_passwd;
-static char current_line[MAX_LINE_LENGTH];
+static char current_line[MAX_PASSWD_LINE_LENGTH];
 static int fd;
 
 // This function assumes that fd is already open
 // Returns -1 if could not read next entry
-int
+static int
 get_and_parse_pwent(void)
 {
-  char* tokens[NUMBER_OF_TOKENS];
+  char* tokens[NUMBER_OF_PASSWD_TOKENS];
   int ok = 0;
-  fgets(current_line, MAX_LINE_LENGTH, fd);
+  fgets(current_line, MAX_PASSWD_LINE_LENGTH, fd);
   int length = strlen(current_line);
   if (current_line[length - 1] == '\n' ||
       current_line[length - 1] == '\r') {
@@ -28,7 +28,7 @@ get_and_parse_pwent(void)
       }
       current_line[i] = 0;
       ok = 0;
-    } else if (ok == 0 && next_token < NUMBER_OF_TOKENS) {
+    } else if (ok == 0 && next_token < NUMBER_OF_PASSWD_TOKENS) {
       ok = 1;
       tokens[next_token++] = current_line + i;
     }
@@ -107,7 +107,6 @@ getpwuid(uid_t uid)
   endpwent();
   return 0;
 }
-
 
 int
 putpwent(struct passwd* pass, int fd)

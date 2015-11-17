@@ -73,6 +73,7 @@ struct disk_file files[] =
 {
   {"",            "etc",             S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
   {"passwd_file", "etc/passwd",      S_IFREG | S_IRUGO | S_IWUSR, 0, 0},
+  {"group_file",  "etc/group",       S_IFREG | S_IRUGO | S_IWUSR, 0, 0},
   {"",            "root",            S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
   {"",            "home",            S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
   {"",            "home/user",       S_IFDIR | S_IRUGO | S_IWUSR, 1, 1},
