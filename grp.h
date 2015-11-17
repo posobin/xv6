@@ -20,3 +20,4 @@ struct group* getgrent(void);
 int putgrent(struct group*, int fd);
 void setgrent(void);
 void endgrent(void);
+int initgroups(const char* user, gid_t group);

@@ -199,9 +199,11 @@ exit:
   proc->sgid = proc->egid;
   if (new_euid != proc->euid) {
     proc->euid = new_euid;
+    proc->ngroups = 0;
   }
   if (new_egid != proc->egid) {
     proc->egid = new_egid;
+    proc->ngroups = 0;
   }
   oldpgdir = proc->pgdir;
   proc->pgdir = pgdir;

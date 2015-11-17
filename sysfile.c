@@ -668,6 +668,17 @@ sys_chmod(void)
   return 0;
 }
 
+static int
+is_group_supplementary(gid_t group)
+{
+  for (int i = 0; i < proc->ngroups; ++i) {
+    if (group == proc->groups[i]) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 int
 sys_chown(void)
 {
@@ -686,7 +697,8 @@ sys_chown(void)
   ilock(ip);
   if (proc->euid != 0) {
     if ((ip->uid != proc->euid) || (owner != (uid_t)-1 && owner != ip->uid) ||
-        (group != proc->egid && group != ip->gid && group != (uid_t)-1)) {
+        (group != proc->egid && !is_group_supplementary(group) &&
+         group != (uid_t)-1)) {
       iunlockput(ip);
       commit_trans();
       return -EPERM;

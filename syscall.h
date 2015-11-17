@@ -30,3 +30,5 @@
 #define SYS_getegid 29
 #define SYS_chmod 30
 #define SYS_chown 31
+#define SYS_setgroups 32
+#define SYS_getgroups 33

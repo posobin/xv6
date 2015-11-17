@@ -188,6 +188,7 @@ passwd_file:
 group_file:
 	echo root::0:root > group_file
 	echo user::1:user >> group_file
+	echo common::2:root,user >> group_file
 
 fs.img: mkfs passwd_file group_file README $(UPROGS)
 	./mkfs fs.img passwd_file README $(UPROGS)

@@ -37,6 +37,8 @@ int getgid(void);
 int getegid(void);
 int chmod(const char*, mode_t);
 int chown(const char*, uid_t, gid_t);
+int setgroups(uint, gid_t*);
+int getgroups(int, gid_t*);
 
 // ulib.c
 int stat(char*, struct stat*);

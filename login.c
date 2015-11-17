@@ -3,6 +3,7 @@
 #include "fcntl.h"
 #include "md5.h"
 #include "pwd.h"
+#include "grp.h"
 
 #define HASH_LENGTH 32
 
@@ -45,6 +46,10 @@ main()
   if (ok)
   {
     umask(022);
+    if (initgroups(pass->pw_name, pass->pw_gid) < 0) {
+      printf(2, "login: could not initialize groups\n");
+      exit();
+    }
     if (setreuid(pass->pw_uid, pass->pw_uid) < 0 ||
         setregid(pass->pw_gid, pass->pw_gid)) {
       printf(2, "login: could not change rights\n");

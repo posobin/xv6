@@ -166,6 +166,11 @@ fork(void)
   np->egid = proc->egid;
   np->sgid = proc->sgid;
   np->umask = proc->umask;
+
+  np->ngroups = proc->ngroups;
+  for (int i = 0; i < proc->ngroups; ++i) {
+    np->groups[i] = proc->groups[i];
+  }
  
   pid = np->pid;
   np->state = RUNNABLE;

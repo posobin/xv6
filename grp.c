@@ -1,6 +1,7 @@
 #include "grp.h"
 #include "fcntl.h"
 #include "user.h"
+#include "errno.h"
 
 static struct group current_group;
 static char current_line[MAX_GROUP_LINE_LENGTH];
@@ -23,6 +24,7 @@ get_and_parse_grent(void)
   int next_token = 0;
   int i;
   int next_group_name = 0;
+  int comma = 0;
   for (i = 0; current_line[i]; ++i) {
     if (current_line[i] == ':') {
       if (ok == 0) {
@@ -33,11 +35,15 @@ get_and_parse_grent(void)
     } else if (ok == 0 && next_token < NUMBER_OF_GROUP_TOKENS) {
       ok = 1;
       tokens[next_token++] = current_line + i;
-    } else if (current_line[i] == ',' && next_token >= NUMBER_OF_GROUP_TOKENS) {
+      if (next_token == NUMBER_OF_GROUP_TOKENS) {
+        group_members_names[next_group_name++] = current_line + i;
+      }
+    } else if (current_line[i] == ',' && next_token == NUMBER_OF_GROUP_TOKENS) {
       current_line[i] = 0;
-    }
-    if (next_token == NUMBER_OF_GROUP_TOKENS && current_line[i] == 0) {
-      group_members_names[next_group_name++] = current_line + i + 1;
+      comma = 1;
+    } else if (comma) {
+      group_members_names[next_group_name++] = current_line + i;
+      comma = 0;
     }
   }
   if (i == 0) return -1;
@@ -128,5 +134,35 @@ putgrent(struct group* grp, int fd)
     printf(fd, "%s", grp->gr_mem[i]);
   }
   printf(fd, "\n");
+  return 0;
+}
+
+int
+initgroups(const char* user, gid_t additional_group)
+{
+  if (geteuid() != 0) {
+    errno = EPERM;
+    return -1;
+  }
+  const int max_number_of_groups = 32;
+  gid_t groups[max_number_of_groups + 1];
+  setgrent();
+  struct group* group;
+  int next_to_add = 0;
+  int add_additional = 1;
+  while ((group = getgrent())) {
+    for (int i = 0; group->gr_mem[i]; ++i) {
+      if (strcmp(group->gr_mem[i], user) == 0) {
+        groups[next_to_add++] = group->gr_gid;
+        if (group->gr_gid == additional_group) {
+          add_additional = 0;
+        }
+      }
+    }
+  }
+  if (add_additional) {
+    groups[next_to_add++] = additional_group;
+  }
+  setgroups(next_to_add, groups);
   return 0;
 }

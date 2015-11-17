@@ -90,7 +90,8 @@ sys_uptime(void)
   return xticks;
 }
 
-int sys_setreuid(void)
+int
+sys_setreuid(void)
 {
   int ruid, euid;
   if(argint(0, &ruid) < 0 || argint(1, &euid) < 0)
@@ -124,7 +125,8 @@ int sys_setreuid(void)
   return 0;
 }
 
-int sys_setregid(void)
+int
+sys_setregid(void)
 {
   int rgid, egid;
   if(argint(0, &rgid) < 0 || argint(1, &egid) < 0)
@@ -158,22 +160,65 @@ int sys_setregid(void)
   return 0;
 }
 
-int sys_getuid(void)
+int
+sys_getuid(void)
 {
   return proc->uid;
 }
 
-int sys_geteuid(void)
+int
+sys_geteuid(void)
 {
   return proc->euid;
 }
 
-int sys_getgid(void)
+int
+sys_getgid(void)
 {
   return proc->gid;
 }
 
-int sys_getegid(void)
+int
+sys_getegid(void)
 {
   return proc->egid;
+}
+
+int
+sys_setgroups(void)
+{
+  uint count;
+  gid_t* groups;
+  if (argint(0, (int*)&count) < 0 ||
+      argptr(1, (char**)&groups, count * 4) < 0) {
+    return -EINVAL;
+  }
+  if (count >= NGROUPS_MAX) {
+    return -EINVAL;
+  }
+  if (proc->euid != 0) {
+    return -EPERM;
+  }
+  for (int i = 0; i < count; ++i) {
+    proc->groups[i] = groups[i];
+  }
+  proc->ngroups = count;
+  return 0;
+}
+
+int
+sys_getgroups(void)
+{
+  int size;
+  gid_t* list;
+  if (argint(0, &size) < 0 ||
+      (size > 0 && argptr(1, (char**)&list, size * 4) < 0)) {
+    return -EINVAL;
+  }
+  if (size == 0) return proc->ngroups;
+  if (size < proc->ngroups) return -EINVAL;
+  for (int i = 0; i < proc->ngroups; ++i) {
+    list[i] = proc->groups[i];
+  }
+  return proc->ngroups;
 }

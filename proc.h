@@ -49,6 +49,8 @@ struct context {
   uint eip;
 };
 
+#define NGROUPS_MAX 16
+
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Per-process state
@@ -65,14 +67,17 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
-  uint uid;                    // User ID
-  uint euid;                   // Effective user ID
-  uint suid;                   // setuid bit
-  uint gid;                    // Group ID
-  uint egid;                   // Effective group ID
+  uid_t uid;                   // User ID
+  uid_t euid;                  // Effective user ID
+  uid_t suid;                  // Saved UID
+  gid_t gid;                   // Group ID
+  gid_t egid;                  // Effective group ID
+  gid_t sgid;                  // Saved GID
   uint umask;                  // File mode creation mask
-  uint sgid;                   // setgid bit
   char name[16];               // Process name (debugging)
+  uint ngroups;
+  gid_t groups[NGROUPS_MAX];   // Supplementary groups that the current
+                               // user (uid) belongs to
 };
 
 // Process memory is laid out contiguously, low addresses first:
