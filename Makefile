@@ -181,8 +181,8 @@ UPROGS=\
 	_chown\
 
 passwd_file:
-	echo root::0:0:root:/:/sh > passwd_file
-	echo user::1:1:user:/:/sh >> passwd_file
+	echo root::0:0:root:/root:/bin/sh > passwd_file
+	echo user::1:1:user:/home/user:/bin/sh >> passwd_file
 	chmod 644 passwd_file
 
 fs.img: mkfs passwd_file README $(UPROGS)

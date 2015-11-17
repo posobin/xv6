@@ -9,7 +9,7 @@
 #define MAX_LINE_LENGTH MAX_NAME_LENGTH + MAX_PASSWD_HASH_LENGTH +\
   20 + MAX_GECOS_LENGTH + MAX_DIR_LENGTH + MAX_SHELL_LENGTH + 5
 #define NUMBER_OF_TOKENS 7
-#define PASSWD_FILE "/passwd_file"
+#define PASSWD_FILE "/etc/passwd"
 
 struct passwd
 {

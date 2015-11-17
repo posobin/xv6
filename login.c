@@ -51,7 +51,8 @@ main()
       exit();
     }
     char *argv[] = { pass->pw_shell, 0 };
-    execve(pass->pw_shell, argv, environ);
+    chdir(pass->pw_dir);
+    execvpe(pass->pw_shell, argv, environ);
     printf(1, "login: exec user shell failed\n");
     exit();
   }

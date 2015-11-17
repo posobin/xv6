@@ -71,31 +71,37 @@ struct disk_file
 
 struct disk_file files[] =
 {
-  {"README",      "README",       S_IFREG | S_IRUGO | S_IWUSR, 0, 0},
-  {"passwd_file", "passwd_file",  S_IFREG | S_IRUGO | S_IWUSR, 0, 0},
-  {"_cat",        "cat",          S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_echo",       "echo",         S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_forktest",   "forktest",     S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_grep",       "grep",         S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_init",       "init",         S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_kill",       "kill",         S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_ln",         "ln",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_ls",         "ls",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_mkdir",      "mkdir",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_rm",         "rm",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_sh",         "sh",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_stressfs",   "stressfs",     S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_wc",         "wc",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_zombie",     "zombie",       S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_helloworld", "helloworld",   S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_mkfifo",     "mkfifo",       S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_passwd",     "passwd",       S_ISUID | S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_login",      "login",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_id",         "id",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_chmod",      "chmod",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"_chown",      "chown",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
-  {"",            "hha",          S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
+  {"",            "etc",             S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
+  {"passwd_file", "etc/passwd",      S_IFREG | S_IRUGO | S_IWUSR, 0, 0},
+  {"",            "root",            S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
+  {"",            "home",            S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
+  {"",            "home/user",       S_IFDIR | S_IRUGO | S_IWUSR, 1, 1},
+  {"README",      "home/user/README",S_IFREG | S_IRUGO | S_IWUSR, 1, 1},
+  {"",            "bin",             S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
+  {"_cat",        "bin/cat",         S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_echo",       "bin/echo",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_forktest",   "bin/forktest",    S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_grep",       "bin/grep",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_init",       "bin/init",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_kill",       "bin/kill",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_ln",         "bin/ln",          S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_ls",         "bin/ls",          S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_mkdir",      "bin/mkdir",       S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_rm",         "bin/rm",          S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_sh",         "bin/sh",          S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_stressfs",   "bin/stressfs",    S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_wc",         "bin/wc",          S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_zombie",     "bin/zombie",      S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_helloworld", "bin/helloworld",  S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_mkfifo",     "bin/mkfifo",      S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_passwd",     "bin/passwd",      S_ISUID | S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_login",      "bin/login",       S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_id",         "bin/id",          S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_chmod",      "bin/chmod",       S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_chown",      "bin/chown",       S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
 };
+
+int added_inode_numbers[NELEM(files)];
 
 int
 main(int argc, char *argv[])
@@ -163,13 +169,41 @@ main(int argc, char *argv[])
       perror(files[i].original_filename);
       exit(1);
     }
+    int dp = -1;
+    const char* last_slash = strrchr(files[i].xv6_filename, '/');
+    // Find parent inode
+    if (last_slash) {
+      int parent_path_length = last_slash - files[i].xv6_filename;
+      for (int j = 0; j < i; ++j) {
+        if (strncmp(files[j].xv6_filename, files[i].xv6_filename,
+              parent_path_length) == 0 &&
+            (files[j].xv6_filename[parent_path_length] == 0 ||
+             (files[j].xv6_filename[parent_path_length] == '/' &&
+              files[j].xv6_filename[parent_path_length + 1] == 0))) {
+          dp = added_inode_numbers[j];
+          break;
+        }
+      }
+      if (last_slash == files[i].xv6_filename) {
+        dp = rootino;
+      }
+      if (dp < 0) {
+        perror("Could not find parent");
+        printf("Filename: %s\n", files[i].xv6_filename);
+        exit(1);
+      }
+    }
+    else {
+      dp = rootino;
+      last_slash = files[i].xv6_filename - 1;
+    }
 
     inum = ialloc(0, files[i].mode, files[i].uid, files[i].gid);
 
     bzero(&de, sizeof(de));
     de.inum = xshort(inum);
-    strncpy(de.name, files[i].xv6_filename, DIRSIZ);
-    iappend(rootino, &de, sizeof(de));
+    strncpy(de.name, last_slash + 1, DIRSIZ);
+    iappend(dp, &de, sizeof(de));
 
     if (S_ISDIR(files[i].mode)) {
       bzero(&de, sizeof(de));
@@ -178,10 +212,11 @@ main(int argc, char *argv[])
       iappend(inum, &de, sizeof(de));
 
       bzero(&de, sizeof(de));
-      de.inum = xshort(rootino);
+      de.inum = xshort(dp);
       strcpy(de.name, "..");
       iappend(inum, &de, sizeof(de));
     }
+    added_inode_numbers[i] = inum;
 
     if (strlen(files[i].original_filename) != 0) {
       while((cc = read(fd, buf, sizeof(buf))) > 0)
