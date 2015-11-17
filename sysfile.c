@@ -127,7 +127,7 @@ sys_link(void)
   if(argstr(0, &old) < 0 || argstr(1, &new) < 0)
     return -EINVAL;
   if((ip = namei(old)) == 0)
-    return -EACCES;
+    return -ENOENT;
 
   begin_trans();
 
@@ -508,8 +508,10 @@ sys_mknod(void)
   
   begin_trans();
   if((len=argstr(0, &path)) < 0 || argint(1, &major) < 0 ||
-     argint(2, &minor) < 0 || argint(3, &mode) < 0)
+     argint(2, &minor) < 0 || argint(3, &mode) < 0) {
+    commit_trans();
     return -EINVAL;
+  }
   if((ip = create(path, T_DEV, major, minor, mode)) == 0){
     commit_trans();
     return -EACCES;
@@ -527,8 +529,10 @@ sys_mkfifo(void)
   int mode;
   int len;
   begin_trans();
-  if((len = argstr(0, &path)) < 0 || argint(1, &mode) < 0)
+  if((len = argstr(0, &path)) < 0 || argint(1, &mode) < 0) {
+    commit_trans();
     return -EINVAL;
+  }
   if((ip = create(path, T_PIPE, 0, 0, mode)) == 0){
     commit_trans();
     return -ENOENT;
@@ -632,4 +636,65 @@ sys_umask()
   old_value = ((proc->umask) & 0777);
   proc->umask = new_value;
   return old_value;
+}
+
+int
+sys_chmod(void)
+{
+  char* path;
+  mode_t mode;
+  if (argstr(0, &path) < 0 || argint(1, (int*)&mode) < 0) {
+    return -EINVAL;
+  }
+  struct inode* ip = get_file(path);
+  if (ip == 0) {
+    return -ENOENT;
+  }
+
+  begin_trans();
+  ilock(ip);
+  if (proc->euid != 0 && ip->uid != proc->euid) {
+    iunlockput(ip);
+    commit_trans();
+    return -EPERM;
+  }
+  ip->mode &= ~0xFFF;
+  ip->mode |= (mode & 0xFFF);
+  iupdate(ip);
+  iunlockput(ip);
+  commit_trans();
+  
+  return 0;
+}
+
+int
+sys_chown(void)
+{
+  char* path;
+  uid_t owner;
+  gid_t group;
+  if (argstr(0, &path) < 0 || argint(1, (int*)&owner) < 0 ||
+      argint(2, (int*)&group) < 0) {
+    return -EINVAL;
+  }
+  struct inode* ip = get_file(path);
+  if (ip == 0) {
+    return -ENOENT;
+  }
+  begin_trans();
+  ilock(ip);
+  if (proc->euid != 0) {
+    if ((ip->uid != proc->euid) || (owner != (uid_t)-1 && owner != ip->uid) ||
+        (group != proc->egid && group != ip->gid && group != (uid_t)-1)) {
+      iunlockput(ip);
+      commit_trans();
+      return -EPERM;
+    }
+  }
+  if (owner != (uid_t)-1) ip->uid = owner;
+  if (group != (uid_t)-1) ip->gid = group;
+  iupdate(ip);
+  iunlockput(ip);
+  commit_trans();
+  return 0;
 }

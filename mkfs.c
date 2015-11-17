@@ -92,6 +92,8 @@ struct disk_file files[] =
   {"_passwd",     "passwd",       S_ISUID | S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_login",      "login",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_id",         "id",           S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_chmod",      "chmod",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_chown",      "chown",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"",            "hha",          S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
 };
 
