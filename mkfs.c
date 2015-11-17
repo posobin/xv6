@@ -69,16 +69,19 @@ struct disk_file
   int gid;
 };
 
+#define DEFAULT_DIR  S_IFDIR | 0755
+#define DEFAULT_FILE S_IFREG | 0644
+
 struct disk_file files[] =
 {
-  {"",            "etc",             S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
+  {"",            "etc",             DEFAULT_DIR, 0, 0},
   {"passwd_file", "etc/passwd",      S_IFREG | S_IRUGO | S_IWUSR, 0, 0},
   {"group_file",  "etc/group",       S_IFREG | S_IRUGO | S_IWUSR, 0, 0},
-  {"",            "root",            S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
-  {"",            "home",            S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
-  {"",            "home/user",       S_IFDIR | S_IRUGO | S_IWUSR, 1, 1},
-  {"README",      "home/user/README",S_IFREG | S_IRUGO | S_IWUSR, 1, 1},
-  {"",            "bin",             S_IFDIR | S_IRUGO | S_IWUSR, 0, 0},
+  {"",            "root",            S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP, 0, 0},
+  {"",            "home",            DEFAULT_DIR, 0, 0},
+  {"",            "home/user",       DEFAULT_DIR, 1, 1},
+  {"README",      "home/user/README",DEFAULT_FILE, 1, 1},
+  {"",            "bin",             DEFAULT_DIR, 0, 0},
   {"_cat",        "bin/cat",         S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_echo",       "bin/echo",        S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_forktest",   "bin/forktest",    S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
