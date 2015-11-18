@@ -382,10 +382,16 @@ sys_open(void)
   int access_mode = get_current_permissions(ip);
   if (proc->euid != 0) {
     if ((omode & O_RDWR) || (omode & O_WRONLY)) {
-      if (!(access_mode & 2)) return -EACCES;
+      if (!(access_mode & 2)) {
+        iunlockput(ip);
+        return -EACCES;
+      }
     }
     if ((omode & O_RDWR) || !(omode & O_WRONLY)) {
-      if (!(access_mode & 4)) return -EACCES;
+      if (!(access_mode & 4)) {
+        iunlockput(ip);
+        return -EACCES;
+      }
     }
   }
 
