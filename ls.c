@@ -25,6 +25,74 @@ fmtname(char *path)
   return buf;
 }
 
+char permissions_string[11];
+
+char*
+get_permissions_string(uint mode) {
+  if (S_ISLNK(mode)) permissions_string[0] = 'l';
+  else if (S_ISREG(mode)) permissions_string[0] = '-';
+  else if (S_ISBLK(mode)) permissions_string[0] = 'b';
+  else if (S_ISDIR(mode)) permissions_string[0] = 'd';
+  else if (S_ISCHR(mode)) permissions_string[0] = 'c';
+  else if (S_ISFIFO(mode)) permissions_string[0] = 'p';
+  else if (S_ISSOCK(mode)) permissions_string[0] = 's';
+
+  permissions_string[1] = (S_IRUSR & mode) ? 'r' : '-';
+  permissions_string[2] = (S_IWUSR & mode) ? 'w' : '-';
+  permissions_string[3] = (S_IXUSR & mode) ? 'x' : '-';
+
+  if (S_ISUID & mode) {
+    if (S_IXUSR & mode) {
+      permissions_string[3] = 's';
+    } else {
+      permissions_string[3] = 'S';
+    }
+  }
+
+  permissions_string[4] = (S_IRGRP & mode) ? 'r' : '-';
+  permissions_string[5] = (S_IWGRP & mode) ? 'w' : '-';
+  permissions_string[6] = (S_IXGRP & mode) ? 'x' : '-';
+
+  if (S_ISGID & mode) {
+    if (S_IXGRP & mode) {
+      permissions_string[6] = 's';
+    } else {
+      permissions_string[6] = 'S';
+    }
+  }
+
+  permissions_string[7] = (S_IROTH & mode) ? 'r' : '-';
+  permissions_string[8] = (S_IWOTH & mode) ? 'w' : '-';
+  permissions_string[9] = (S_IXOTH & mode) ? 'x' : '-';
+
+  if (S_ISVTX & mode) {
+    if (S_IXOTH & mode) {
+      permissions_string[9] = 't';
+    } else {
+      permissions_string[9] = 'T';
+    }
+  }
+
+  permissions_string[10] = 0;
+  return permissions_string;
+}
+
+void
+print_file_info(char* path, struct stat* stat)
+{
+  printf(1, "%s %2d ", get_permissions_string(stat->mode), stat->nlink);
+
+  struct passwd* passwd = getpwuid(stat->uid);
+  if (passwd) printf(1, "%s ", passwd->pw_name);
+  else printf(1, "%d ", stat->uid);
+
+  struct group* group = getgrgid(stat->gid);
+  if (group) printf(1, "%s ", group->gr_name);
+  else printf(1, "%d ", stat->gid);
+
+  printf(1, "%5d %3d %s\n", stat->size, stat->ino, fmtname(path));
+}
+
 void
 ls(char *path)
 {
@@ -45,15 +113,7 @@ ls(char *path)
   }
   
   if(S_ISREG(st.mode)){
-    printf(1, "%s %d %d %d %03o ", fmtname(path),
-        (st.mode & S_IFMT) >> 12, st.ino, st.size, (st.mode & 0777),
-        st.uid, st.gid);
-    struct passwd* passwd = getpwuid(st.uid);
-    if (passwd) printf(1, "%s ", passwd->pw_name);
-    else printf(1, "%d ", st.uid);
-    struct group* group = getgrgid(st.gid);
-    if (group) printf(1, "%s\n", group->gr_name);
-    else printf(1, "%d\n", st.gid);
+    print_file_info(path, &st);
   }
 
   if(S_ISDIR(st.mode)){
@@ -72,15 +132,7 @@ ls(char *path)
         printf(1, "ls: cannot stat %s\n", buf);
         continue;
       }
-      printf(1, "%s %d %d %d %03o ", fmtname(buf),
-          (st.mode & S_IFMT) >> 12, st.ino, st.size,
-          (st.mode & 0777), st.uid, st.gid);
-      struct passwd* passwd = getpwuid(st.uid);
-      if (passwd) printf(1, "%s ", passwd->pw_name);
-      else printf(1, "%d ", st.uid);
-      struct group* group = getgrgid(st.gid);
-      if (group) printf(1, "%s\n", group->gr_name);
-      else printf(1, "%d\n", st.gid);
+      print_file_info(buf, &st);
     }
   }
   close(fd);
