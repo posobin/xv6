@@ -195,13 +195,15 @@ void
 exectest(void)
 {
   int fd, fd2, pid;
-  char rec_test_fname[] = "rec_test";
-  char rec_test_fname2[] = "rec_test2";
-  char rec_str[] = "#!rec_test";
-  char rec_str2[] = "#!ls";
+  char rec_test_fname[] = "./rec_test";
+  char rec_test_fname2[] = "./rec_test2";
+  char rec_str[] = "#!./rec_test\n";
+  char rec_str2[] = "#!/bin/ls\n";
 
   printf(stdout, "exec test\n");
-  fd = open(rec_test_fname, O_CREATE|O_RDWR, 0666);
+  unlink(rec_test_fname);
+  unlink(rec_test_fname2);
+  fd = open(rec_test_fname, O_CREATE|O_RDWR, 0755);
   if(fd < 0){
     printf(stdout, "error: create %s failed!\n", rec_test_fname);
     exit();
@@ -214,15 +216,15 @@ exectest(void)
   close(fd);
 
   emptyargv[0] = rec_test_fname;
-  if(execve(rec_test_fname, emptyargv, environ) != -1){
+  if(execvpe(rec_test_fname, emptyargv, environ) != -1){
     printf(stdout, "error: recursive exec has not failed\
         (which is a failure)\n");
     exit();
   }
   unlink(rec_test_fname);
 
-  fd = open(rec_test_fname, O_CREATE|O_RDWR, 0666);
-  fd2 = open(rec_test_fname2, O_CREATE|O_RDWR, 0666);
+  fd = open(rec_test_fname, O_CREATE | O_RDWR, 0755);
+  fd2 = open(rec_test_fname2, O_CREATE | O_RDWR, 0755);
   if(fd < 0 || fd2 < 0){
     printf(stdout, "error: create %s failed!\n",
         (fd < 0 ? rec_test_fname : rec_test_fname2));
@@ -244,7 +246,7 @@ exectest(void)
   pid = fork();
   if(pid==0){
     emptyargv[0] = rec_test_fname2;
-    execve(rec_test_fname2, emptyargv, environ);
+    execvpe(rec_test_fname2, emptyargv, environ);
     close(open("exec-failed", O_CREATE, 0666));
     exit();
   } else if(pid < 0){
@@ -263,7 +265,7 @@ exectest(void)
   unlink(rec_test_fname);
   unlink(rec_test_fname2);
 
-  if(execve("echo", echoargv, environ) < 0){
+  if(execvpe("echo", echoargv, environ) < 0){
     printf(stdout, "exec echo failed\n");
     exit();
   }
@@ -1592,7 +1594,7 @@ bigargtest(void)
       args[i] = "bigargs test: failed\n                                                                                                                                                                                                       ";
     args[MAXARG-1] = 0;
     printf(stdout, "bigarg test\n");
-    execve("echo", args, environ);
+    execvpe("echo", args, environ);
     printf(stdout, "bigarg test ok\n");
     fd = open("bigarg-ok", O_CREATE, 0666);
     close(fd);
