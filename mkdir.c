@@ -13,7 +13,7 @@ main(int argc, char *argv[])
   }
 
   for(i = 1; i < argc; i++){
-    if(mkdir(argv[i], 0666) < 0){
+    if(mkdir(argv[i], 0755) < 0){
       printf(2, "mkdir: %s failed to create\n", argv[i]);
       break;
     }

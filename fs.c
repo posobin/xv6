@@ -568,11 +568,11 @@ dirlink(struct inode *dp, char *name, uint inum)
   // Check that name is not present.
   if(!IS_ERR(ip = dirlookup(dp, name, 0))){
     iput(ip);
-    return PTR_ERR(ip);
+    return -EEXIST;
   }
 
   // We can’t either write or execute, so we can’t create new entry in dir
-  if(proc->euid != 0 && (get_current_permissions(ip) & 3) != 3) {
+  if(proc->euid != 0 && (get_current_permissions(dp) & 3) != 3) {
     iput(ip);
     return -EPERM;
   }

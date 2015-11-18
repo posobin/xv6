@@ -337,9 +337,17 @@ create(char *path, short type, short major, short minor, uint mode)
   if(type == T_DIR){  // Create . and .. entries.
     dp->nlink++;  // for ".."
     iupdate(dp);
+    // Dirty hack. Otherwise, if we got some bad mode
+    // (i.e. 0000), we would not have been able to
+    // create dots in the new directory (if we are not root).
+    int real_mode = ip->mode;
+    ip->mode |= 0333;
     // No ip->nlink++ for ".": avoid cyclic ref count.
-    if(dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0)
+    if(dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0) {
       panic("create dots");
+    }
+    ip->mode = real_mode;
+    iupdate(ip);
   }
 
   if(dirlink(dp, name, ip->inum) < 0)
@@ -360,7 +368,7 @@ sys_open(void)
 
   if(argstr(0, &path) < 0 || argint(1, &omode) < 0)
     return -EINVAL;
-  if(omode & O_CREATE && !get_file(path)){
+  if(omode & O_CREATE && IS_ERR(get_file(path))){
     if(argint(2, &mode) < 0)
       return -EINVAL;
     begin_trans();

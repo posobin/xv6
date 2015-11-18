@@ -103,6 +103,7 @@ struct disk_file files[] =
   {"_id",         "bin/id",          S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_chmod",      "bin/chmod",       S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_chown",      "bin/chown",       S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_usertests",  "bin/usertests",   S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
 };
 
 int added_inode_numbers[NELEM(files)];
