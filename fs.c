@@ -19,6 +19,8 @@
 #include "buf.h"
 #include "fs.h"
 #include "file.h"
+#include "errno.h"
+#include "err.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 static void itrunc(struct inode*);
@@ -534,6 +536,10 @@ dirlookup(struct inode *dp, char *name, uint *poff)
   if(!S_ISDIR(dp->mode))
     panic("dirlookup not DIR");
 
+  if(proc->euid != 0 && !(get_current_permissions(dp) & 1)) {
+    return ERR_PTR(-EPERM);
+  }
+
   for(off = 0; off < dp->size; off += sizeof(de)){
     if(readi(dp, (char*)&de, off, sizeof(de)) != sizeof(de))
       panic("dirlink read");
@@ -548,7 +554,7 @@ dirlookup(struct inode *dp, char *name, uint *poff)
     }
   }
 
-  return 0;
+  return ERR_PTR(-ENOENT);
 }
 
 // Write a new directory entry (name, inum) into the directory dp.
@@ -560,9 +566,15 @@ dirlink(struct inode *dp, char *name, uint inum)
   struct inode *ip;
 
   // Check that name is not present.
-  if((ip = dirlookup(dp, name, 0)) != 0){
+  if(!IS_ERR(ip = dirlookup(dp, name, 0))){
     iput(ip);
-    return -1;
+    return PTR_ERR(ip);
+  }
+
+  // We can’t either write or execute, so we can’t create new entry in dir
+  if(proc->euid != 0 && (get_current_permissions(ip) & 3) != 3) {
+    iput(ip);
+    return -EPERM;
   }
 
   // Look for an empty dirent.
@@ -638,7 +650,12 @@ namex(char *path, int nameiparent, char *name)
     ilock(ip);
     if(!S_ISDIR(ip->mode)){
       iunlockput(ip);
-      return 0;
+      return ERR_PTR(-ENOTDIR);
+    }
+    if(proc->euid != 0 && !(get_current_permissions(ip) & 1)) {
+      // Exec flag is not set, we are not allowed to do anything here
+      iunlockput(ip);
+      return ERR_PTR(-EPERM);
     }
     if(nameiparent && *path == '\0'){
       // Stop one level early.
@@ -647,14 +664,14 @@ namex(char *path, int nameiparent, char *name)
     }
     if((next = dirlookup(ip, name, 0)) == 0){
       iunlockput(ip);
-      return 0;
+      return ERR_PTR(-ENOENT);
     }
     iunlockput(ip);
     ip = next;
   }
   if(nameiparent){
     iput(ip);
-    return 0;
+    return ERR_PTR(-ENOENT);
   }
   return ip;
 }

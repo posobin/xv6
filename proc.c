@@ -171,7 +171,8 @@ fork(void)
   for (int i = 0; i < proc->ngroups; ++i) {
     np->groups[i] = proc->groups[i];
   }
- 
+
+  np->echo_input = proc->echo_input;
   pid = np->pid;
   np->state = RUNNABLE;
   safestrcpy(np->name, proc->name, sizeof(proc->name));

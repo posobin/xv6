@@ -16,6 +16,7 @@
 #include "pipe.h"
 #include "errno.h"
 #include "stat.h"
+#include "err.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -127,8 +128,8 @@ sys_link(void)
 
   if(argstr(0, &old) < 0 || argstr(1, &new) < 0)
     return -EINVAL;
-  if((ip = namei(old)) == 0)
-    return -ENOENT;
+  if(IS_ERR(ip = namei(old)))
+    return PTR_ERR(ip);
 
   begin_trans();
 
@@ -144,8 +145,8 @@ sys_link(void)
   iunlock(ip);
 
   int status = 0;
-  if((dp = nameiparent(new, name)) == 0) {
-    status = ENOENT;
+  if(IS_ERR(dp = nameiparent(new, name))) {
+    status = -PTR_ERR(dp);
     goto bad;
   }
   ilock(dp);
@@ -202,8 +203,8 @@ sys_unlink(void)
 
   if(argstr(0, &path) < 0)
     return -EINVAL;
-  if((dp = nameiparent(path, name)) == 0)
-    return -ENOENT;
+  if(IS_ERR(dp = nameiparent(path, name)))
+    return PTR_ERR(dp);
 
   begin_trans();
 
@@ -221,8 +222,8 @@ sys_unlink(void)
     goto bad;
   }
 
-  if((ip = dirlookup(dp, name, &off)) == 0) {
-    status = ENOENT;
+  if(IS_ERR(ip = dirlookup(dp, name, &off))) {
+    status = -PTR_ERR(ip);
     goto bad;
   }
   ilock(ip);
@@ -284,17 +285,17 @@ get_file(char *path)
   struct inode *ip, *dp;
   char name[DIRSIZ];
 
-  if((dp = nameiparent(path, name)) == 0)
-    return 0;
+  if(IS_ERR(dp = nameiparent(path, name)))
+    return dp;
   ilock(dp);
 
-  if((ip = dirlookup(dp, name, &off)) != 0){
+  if(!IS_ERR(ip = dirlookup(dp, name, &off))){
     iunlockput(dp);
     return ip;
   }
 
   iunlockput(dp);
-  return 0;
+  return ip;
 }
 
 static struct inode*
@@ -303,22 +304,22 @@ create(char *path, short type, short major, short minor, uint mode)
   struct inode *ip, *dp;
   char name[DIRSIZ];
 
-  if((ip = get_file(path)) != 0){
+  if(!IS_ERR(ip = get_file(path))){
     ilock(ip);
     if((type == T_FILE && S_ISREG(ip->mode)) ||
         (type == T_FILE && S_ISFIFO(ip->mode)))
       return ip;
     iunlockput(ip);
-    return 0;
+    return ERR_PTR(-EEXIST);
   }
 
-  if((dp = nameiparent(path, name)) == 0)
-    return 0;
+  if(IS_ERR(dp = nameiparent(path, name)))
+    return dp;
   ilock(dp);
   int permissions = get_current_permissions(dp);
   if(proc->euid != 0 && !(permissions & 2)) {
     iunlock(dp);
-    return 0;
+    return ERR_PTR(-EPERM);
   }
   if((ip = ialloc(dp->dev, type)) == 0)
     panic("create: ialloc");
@@ -365,11 +366,11 @@ sys_open(void)
     begin_trans();
     ip = create(path, T_FILE, 0, 0, mode);
     commit_trans();
-    if(ip == 0)
-      return -EACCES; // TODO separate different problems in create
+    if(IS_ERR(ip))
+      return PTR_ERR(ip);
   } else {
-    if((ip = namei(path)) == 0)
-      return -EACCES;
+    if(IS_ERR(ip = namei(path)))
+      return PTR_ERR(ip);
     ilock(ip);
     if(!S_ISFIFO(ip->mode) && (omode & O_NONBLOCK)){
       omode -= O_NONBLOCK;
@@ -399,7 +400,7 @@ sys_open(void)
   if(S_ISFIFO(ip->mode)){
     if(omode & O_RDWR){ // POSIX leaves this case undefined
       iunlockput(ip);
-      return -1;
+      return -EINVAL;
     }
     if(ip->read_file == 0){ // Create pipe if it has not been already created
       if((status = pipealloc(&ip->read_file, &ip->write_file)) < 0){
@@ -494,10 +495,9 @@ sys_mkdir(void)
   }
 
   begin_trans();
-  if((ip = create(path, T_DIR, 0, 0, mode)) == 0){
+  if(IS_ERR(ip = create(path, T_DIR, 0, 0, mode))){
     commit_trans();
-    // TODO return different values depending on create’s result
-    return -EACCES;
+    return PTR_ERR(ip);
   }
   iunlockput(ip);
   commit_trans();
@@ -519,9 +519,9 @@ sys_mknod(void)
     commit_trans();
     return -EINVAL;
   }
-  if((ip = create(path, T_DEV, major, minor, mode)) == 0){
+  if(IS_ERR(ip = create(path, T_DEV, major, minor, mode))){
     commit_trans();
-    return -EACCES;
+    return PTR_ERR(ip);
   }
   iunlockput(ip);
   commit_trans();
@@ -540,9 +540,9 @@ sys_mkfifo(void)
     commit_trans();
     return -EINVAL;
   }
-  if((ip = create(path, T_PIPE, 0, 0, mode)) == 0){
+  if(IS_ERR(ip = create(path, T_PIPE, 0, 0, mode))){
     commit_trans();
-    return -ENOENT;
+    return PTR_ERR(ip);
   }
   ip->read_file = ip->write_file = 0;
   iunlockput(ip);
@@ -556,8 +556,12 @@ sys_chdir(void)
   char *path;
   struct inode *ip;
 
-  if(argstr(0, &path) < 0 || (ip = namei(path)) == 0)
+  if(argstr(0, &path) < 0) {
     return -EINVAL;
+  }
+  if(IS_ERR(ip = namei(path))) {
+    return PTR_ERR(ip);
+  }
   ilock(ip);
   if(!S_ISDIR(ip->mode)){
     iunlockput(ip);
@@ -654,8 +658,8 @@ sys_chmod(void)
     return -EINVAL;
   }
   struct inode* ip = get_file(path);
-  if (ip == 0) {
-    return -ENOENT;
+  if (IS_ERR(ip)) {
+    return PTR_ERR(ip);
   }
 
   begin_trans();

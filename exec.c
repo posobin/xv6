@@ -10,6 +10,7 @@
 #include "file.h"
 #include "stat.h"
 #include "errno.h"
+#include "err.h"
 
 static int _exec(char* path, char **argv, char **envp, int current_depth);
 
@@ -35,8 +36,8 @@ _exec(char *path, char **argv, char **envp, int current_depth)
   if(--current_depth < 0)
     return -ELOOP;
 
-  if((ip = namei(path)) == 0)
-    return -ENOENT;
+  if(IS_ERR(ip = namei(path)))
+    return PTR_ERR(ip);
   ilock(ip);
   if((!(get_current_permissions(ip) & 1)) && proc->euid != 0){
     iunlock(ip);
@@ -205,6 +206,7 @@ exit:
     proc->egid = new_egid;
     proc->ngroups = 0;
   }
+  proc->echo_input = 1; // Clear echo_input flag for new process
   oldpgdir = proc->pgdir;
   proc->pgdir = pgdir;
   proc->sz = sz;

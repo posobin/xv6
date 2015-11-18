@@ -78,6 +78,7 @@ struct proc {
   uint ngroups;
   gid_t groups[NGROUPS_MAX];   // Supplementary groups that the current
                                // user (uid) belongs to
+  int echo_input;
 };
 
 // Process memory is laid out contiguously, low addresses first:
