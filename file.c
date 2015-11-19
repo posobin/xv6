@@ -99,6 +99,7 @@ fileclose(struct file *f)
       f->type = FD_NONE;
       release(&ftable.lock);
     }
+    kfree((char*)ff.pipe);
     ff.ip->read_file = 0;
     ff.ip->write_file = 0;
     iunlock(ff.ip);
