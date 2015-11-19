@@ -96,12 +96,13 @@ main(int argc, char** argv)
   strncpy(to_change->data->pw_passwd, password_hash, 33);
 
   int fd = open(PASSWD_FILE, O_WRONLY);
+  int save = 1;
   if (fd < 0) {
     printf(2, "Cannot open passwd file for writing\n");
-    exit();
+    save = 0;
   }
   while (current) {
-    putpwent(current->data, fd);
+    if (save) putpwent(current->data, fd);
     free(current->data->pw_name);
     free(current->data->pw_passwd);
     free(current->data->pw_gecos);

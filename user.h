@@ -46,6 +46,7 @@ char* strcpy(char*, char*);
 void *memmove(void*, void*, int);
 char* strchr(const char*, char c);
 int strcmp(const char*, const char*);
+char* safestrcpy(char *s, const char *t, int n);
 void printf(int, char*, ...);
 char* gets(char*, int max);
 char* fgets(char*, int, int);
