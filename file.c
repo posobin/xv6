@@ -62,6 +62,7 @@ fileclose(struct file *f)
   acquire(&ftable.lock);
   if(f->ref < 1)
     panic("fileclose");
+  int should_delete = 0;
   if(f->type == FD_FIFO){
     struct pipe* p = f->pipe;
     // If we are the last process using this end of the pipe,
@@ -75,9 +76,12 @@ fileclose(struct file *f)
       p->readopen = 0;
       wakeup(&p->nwrite);
     }
+    if (!p->writeopen && !p->readopen) {
+      should_delete = 1;
+    }
     release(&p->lock);
   }
-  if(--f->ref > 0){
+  if(--f->ref > 0 && !should_delete){
     release(&ftable.lock);
     return;
   }
@@ -91,14 +95,7 @@ fileclose(struct file *f)
   // read_file and write_file of our inode to 0, so that on the next
   // open of the FIFO we will create the pipe again.
   if(ff.type == FD_FIFO && pipeclose(ff.pipe, ff.writable)){
-    // Close another file that is opened for this pipe.
     ilock(ff.ip);
-    f = (ff.writable ? ff.ip->read_file : ff.ip->write_file);
-    if(f){
-      acquire(&ftable.lock);
-      f->type = FD_NONE;
-      release(&ftable.lock);
-    }
     ff.ip->read_file = 0;
     ff.ip->write_file = 0;
     iunlock(ff.ip);
