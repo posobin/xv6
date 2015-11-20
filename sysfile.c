@@ -239,20 +239,9 @@ sys_unlink(void)
     struct pipe* p = ip->read_file->pipe;
     acquire(&p->lock);
     p->is_deleted = 1;
-    while(p->readopen > 0 && !proc->killed) {
-      wakeup(&p->nread);
-      sleep(&p->nwrite, &p->lock);
-    }
-    while(p->writeopen > 0 && !proc->killed) {
-      wakeup(&p->nwrite);
-      sleep(&p->nread, &p->lock);
-    }
+    wakeup(&p->nread);
+    wakeup(&p->nwrite);
     release(&p->lock);
-    // Because readopen and writeopen are both zeroes,
-    // this fileclose will also close ip->write_open.
-    iunlock(ip);
-    fileclose(ip->read_file);
-    ilock(ip);
   }
 
   memset(&de, 0, sizeof(de));

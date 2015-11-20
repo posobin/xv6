@@ -69,10 +69,10 @@ fileclose(struct file *f)
     // could act accordingly.
     acquire(&p->lock);
     if(f->writable && --p->writeopen <= 0){
-      if(p->writeopen < 0) p->writeopen = 0;
+      p->writeopen = 0;
       wakeup(&p->nread);
     } else if(!f->writable && --p->readopen <= 0){
-      if(p->readopen < 0) p->readopen = 0;
+      p->readopen = 0;
       wakeup(&p->nwrite);
     }
     release(&p->lock);
@@ -99,7 +99,6 @@ fileclose(struct file *f)
       f->type = FD_NONE;
       release(&ftable.lock);
     }
-    kfree((char*)ff.pipe);
     ff.ip->read_file = 0;
     ff.ip->write_file = 0;
     iunlock(ff.ip);
