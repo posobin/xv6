@@ -90,12 +90,14 @@ fileclose(struct file *f)
   f->type = FD_NONE;
   release(&ftable.lock);
   
-  // Close our end of the pipe,
-  // and if we were the last process that had the pipe open, set
-  // read_file and write_file of our inode to 0, so that on the next
-  // open of the FIFO we will create the pipe again.
-  if(ff.type == FD_FIFO && pipeclose(ff.pipe, ff.writable)){
+  if(ff.type == FD_FIFO){
+    // Close our end of the pipe,
+    // and set read_file and write_file of our inode to 0,
+    // so that on the next open of the FIFO we will create the pipe again.
+    pipeclose(ff.pipe, ff.writable);
     ilock(ff.ip);
+    ff.ip->read_file->ref = 0;
+    ff.ip->write_file->ref = 0;
     ff.ip->read_file = 0;
     ff.ip->write_file = 0;
     iunlock(ff.ip);
