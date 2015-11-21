@@ -42,6 +42,8 @@ filealloc(void)
 }
 
 // Increment ref count for file f.
+// Also increments readopen or writeopen, if file is an
+// end of a pipe.
 struct file*
 filedup(struct file *f)
 {
@@ -49,6 +51,12 @@ filedup(struct file *f)
   if(f->ref < 1)
     panic("filedup");
   f->ref++;
+  if (f->type == FD_FIFO) {
+    acquire(&f->pipe->lock);
+    f->pipe->writeopen += f->writable;
+    f->pipe->readopen += f->readable;
+    release(&f->pipe->lock);
+  }
   release(&ftable.lock);
   return f;
 }
