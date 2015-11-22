@@ -357,7 +357,8 @@ sys_open(void)
 
   if(argstr(0, &path) < 0 || argint(1, &omode) < 0)
     return -EINVAL;
-  if(omode & O_CREATE && IS_ERR(get_file(path))){
+  ip = 0;
+  if(omode & O_CREATE && IS_ERR(ip = namei(path))){
     if(argint(2, &mode) < 0)
       return -EINVAL;
     begin_trans();
@@ -366,7 +367,8 @@ sys_open(void)
     if(IS_ERR(ip))
       return PTR_ERR(ip);
   } else {
-    if(IS_ERR(ip = namei(path)))
+    if((ip && IS_ERR(ip)) ||
+        (!ip && IS_ERR(ip = namei(path))))
       return PTR_ERR(ip);
     ilock(ip);
     if(!S_ISFIFO(ip->mode) && (omode & O_NONBLOCK)){
@@ -411,8 +413,14 @@ sys_open(void)
       ip->read_file->pipe->writeopen = 0;
       ip->read_file->pipe->readopen = 0;
     }
-    if((!(omode & O_WRONLY) && ((fd = fdalloc(ip->read_file)) < 0)) ||
-        ((omode & O_WRONLY) && ((fd = fdalloc(ip->write_file)) < 0))){
+    if ((f = filealloc()) == 0) {
+      iunlockput(ip);
+      return -EMFILE;
+    }
+    if (!(omode & O_WRONLY)) *f = *ip->read_file;
+    else *f = *ip->write_file;
+    f->ref = 1;
+    if((fd = fdalloc(f)) < 0) {
       iunlockput(ip);
       return -ENFILE;
     }
@@ -429,6 +437,8 @@ sys_open(void)
     if(omode & O_NONBLOCK){
       if((omode & O_WRONLY) && p->readopen == 0){
         release(&p->lock);
+        fileclose(f);
+        proc->ofile[fd] = 0;
         return -ENXIO;
       }
       if(omode & O_WRONLY) wakeup(&p->nread);
@@ -451,6 +461,8 @@ sys_open(void)
         if(*our_end_count > 0) (*our_end_count)--;
         wakeup(other_wakeup);
         release(&p->lock);
+        fileclose(f);
+        proc->ofile[fd] = 0;
         return -ENOENT;
       }
       wakeup(other_wakeup);
