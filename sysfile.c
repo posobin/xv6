@@ -268,32 +268,12 @@ bad:
 }
 
 static struct inode*
-get_file(char *path)
-{
-  uint off;
-  struct inode *ip, *dp;
-  char name[DIRSIZ];
-
-  if(IS_ERR(dp = nameiparent(path, name)))
-    return dp;
-  ilock(dp);
-
-  if(!IS_ERR(ip = dirlookup(dp, name, &off))){
-    iunlockput(dp);
-    return ip;
-  }
-
-  iunlockput(dp);
-  return ip;
-}
-
-static struct inode*
 create(char *path, short type, short major, short minor, uint mode)
 {
   struct inode *ip, *dp;
   char name[DIRSIZ];
 
-  if(!IS_ERR(ip = get_file(path))){
+  if(!IS_ERR(ip = namei(path))){
     ilock(ip);
     if((type == T_FILE && S_ISREG(ip->mode)) ||
         (type == T_FILE && S_ISFIFO(ip->mode)))
@@ -669,7 +649,7 @@ sys_chmod(void)
   if (argstr(0, &path) < 0 || argint(1, (int*)&mode) < 0) {
     return -EINVAL;
   }
-  struct inode* ip = get_file(path);
+  struct inode* ip = namei(path);
   if (IS_ERR(ip)) {
     return PTR_ERR(ip);
   }
@@ -711,9 +691,9 @@ sys_chown(void)
       argint(2, (int*)&group) < 0) {
     return -EINVAL;
   }
-  struct inode* ip = get_file(path);
-  if (ip == 0) {
-    return -ENOENT;
+  struct inode* ip = namei(path);
+  if (IS_ERR(ip)) {
+    return PTR_ERR(ip);
   }
   begin_trans();
   ilock(ip);
