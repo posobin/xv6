@@ -107,6 +107,7 @@ int             pipewrite(struct pipe*, char*, int);
 struct proc*    copyproc(struct proc*);
 void            exit(void);
 int             fork(void);
+int             clone(void*);
 int             growproc(int);
 int             kill(int);
 void            pinit(void);
@@ -118,6 +119,7 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+uint*           get_empty_pgdir_link_count(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

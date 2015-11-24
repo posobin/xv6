@@ -10,6 +10,7 @@
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
+  uint pgdirs_link_counts[NPROC];
 } ptable;
 
 static struct proc *initproc;
@@ -73,6 +74,21 @@ found:
   return p;
 }
 
+uint*
+get_empty_pgdir_link_count(void)
+{
+  acquire(&ptable.lock);
+  for (int i = 0; i < NELEM(ptable.pgdirs_link_counts); ++i) {
+    if (ptable.pgdirs_link_counts[i] == 0) {
+      ptable.pgdirs_link_counts[i] = 1;
+      release(&ptable.lock);
+      return &ptable.pgdirs_link_counts[i];
+    }
+  }
+  release(&ptable.lock);
+  return 0;
+}
+
 //PAGEBREAK: 32
 // Set up first user process.
 void
@@ -85,6 +101,7 @@ userinit(void)
   initproc = p;
   if((p->pgdir = setupkvm()) == 0)
     panic("userinit: out of memory?");
+  p->pgdir_link_count = get_empty_pgdir_link_count();
   inituvm(p->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
   p->sz = PGSIZE;
   memset(p->tf, 0, sizeof(*p->tf));
@@ -147,6 +164,7 @@ fork(void)
     np->state = UNUSED;
     return -1;
   }
+  np->pgdir_link_count = get_empty_pgdir_link_count();
   np->sz = proc->sz;
   np->parent = proc;
   *np->tf = *proc->tf;
@@ -166,6 +184,52 @@ fork(void)
   np->egid = proc->egid;
   np->sgid = proc->sgid;
   np->umask = proc->umask;
+
+  np->ngroups = proc->ngroups;
+  for (int i = 0; i < proc->ngroups; ++i) {
+    np->groups[i] = proc->groups[i];
+  }
+
+  np->echo_input = proc->echo_input;
+  pid = np->pid;
+  np->state = RUNNABLE;
+  safestrcpy(np->name, proc->name, sizeof(proc->name));
+  return pid;
+}
+
+int
+clone(void* child_stack)
+{
+  int i, pid;
+  struct proc *np;
+
+  // Allocate process.
+  if((np = allocproc()) == 0)
+    return -1;
+
+  np->pgdir = proc->pgdir;
+  np->sz = proc->sz;
+  np->parent = proc;
+  np->pgdir_link_count = proc->pgdir_link_count;
+  (*np->pgdir_link_count)++;
+  *np->tf = *proc->tf;
+
+  // Clear %eax so that clone returns 0 in the child.
+  np->tf->eax = 0;
+
+  for(i = 0; i < NOFILE; i++)
+    if(proc->ofile[i])
+      np->ofile[i] = filedup(proc->ofile[i]);
+  np->cwd = idup(proc->cwd);
+
+  np->uid = proc->uid;
+  np->euid = proc->euid;
+  np->suid = proc->suid;
+  np->gid = proc->gid;
+  np->egid = proc->egid;
+  np->sgid = proc->sgid;
+  np->umask = proc->umask;
+  np->tf->esp = (uint)child_stack;
 
   np->ngroups = proc->ngroups;
   for (int i = 0; i < proc->ngroups; ++i) {
@@ -243,7 +307,9 @@ wait(void)
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
-        freevm(p->pgdir);
+        if (--(*p->pgdir_link_count) == 0) {
+          freevm(p->pgdir);
+        }
         p->state = UNUSED;
         p->pid = 0;
         p->parent = 0;

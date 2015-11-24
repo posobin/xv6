@@ -208,12 +208,16 @@ exit:
   }
   proc->echo_input = 1; // Clear echo_input flag for new process
   oldpgdir = proc->pgdir;
+  int old_pgdir_link_count = --(*proc->pgdir_link_count);
+  proc->pgdir_link_count = get_empty_pgdir_link_count();
   proc->pgdir = pgdir;
   proc->sz = sz;
   proc->tf->eip = elf.entry;  // main
   proc->tf->esp = sp;
   switchuvm(proc);
-  freevm(oldpgdir);
+  if (old_pgdir_link_count == 0) {
+    freevm(oldpgdir);
+  }
   return 0;
 
  bad:

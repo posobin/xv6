@@ -32,3 +32,4 @@
 #define SYS_chown 31
 #define SYS_setgroups 32
 #define SYS_getgroups 33
+#define SYS_clone 34

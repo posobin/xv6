@@ -14,6 +14,15 @@ sys_fork(void)
 }
 
 int
+sys_clone(void)
+{
+  char* stack;
+  if (argptr(0, &stack, 0) < 0)
+    return -EINVAL;
+  return clone(stack);
+}
+
+int
 sys_exit(void)
 {
   exit();

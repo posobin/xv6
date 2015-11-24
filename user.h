@@ -39,6 +39,7 @@ int chmod(const char*, mode_t);
 int chown(const char*, uid_t, gid_t);
 int setgroups(uint, gid_t*);
 int getgroups(int, gid_t*);
+int clone(void*);
 
 // ulib.c
 int stat(char*, struct stat*);
@@ -61,3 +62,4 @@ char* strrchr(const char *s, int c);
 char* strchrnul(const char *s, int c);
 char* getenv(const char *name);
 int execvpe(const char *file, char *const argv[], char *const envp[]);
+int thread_create(int (*start_routine)(void*), void *arg);

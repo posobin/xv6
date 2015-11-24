@@ -4,6 +4,7 @@
 #include "user.h"
 #include "x86.h"
 #include "errno.h"
+#include "syscall.h"
 
 char **environ = 0;
 
@@ -179,13 +180,42 @@ char*
 getenv(const char *name)
 {
   int length = strlen(name);
-  for (int i = 0; environ[i]; ++i)
-  {
+  for (int i = 0; environ[i]; ++i) {
     if (strncmp(environ[i], name, length) == 0 &&
-        environ[i][length] == '=')
-    {
+        environ[i][length] == '=') {
       return environ[i] + length + 1;
     }
   }
   return 0;
+}
+
+#define STACKSIZE 1024
+
+int
+thread_create(int (*fn)(void*), void *arg)
+{
+  int retval;
+  void** stack = (void**)malloc(STACKSIZE);
+  stack = (void**)((char*)stack + STACKSIZE);
+  *--stack = arg;
+  __asm__ __volatile__(
+      "pushl %4\n\t"
+      "pushl %1\n\t"
+      "int $0x40\n\t"   /* xv6 system call */
+      "testl %0,%0\n\t" /* check return value */
+      "jne f1\n\t"    /* jump if parent */
+      "call *%3\n\t"    /* start subthread function */
+      "movl %2,%0\n\t"
+      "int $0x40\n"   /* exit system call: exit subthread */
+      "f1:\t"
+      :"=a" (retval)
+      :"0" (SYS_clone),"i" (SYS_exit),
+      "r" (fn),
+      "b" (stack));
+  if (retval < 0)
+  {
+    errno = -retval;
+    retval = -1;
+  }
+  return retval;
 }
