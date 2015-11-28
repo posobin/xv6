@@ -9,7 +9,7 @@ function(void* ch)
   return 10;
 }
 
-const int NTHREADS = 50;
+const int NTHREADS = 80;
 
 int
 main()

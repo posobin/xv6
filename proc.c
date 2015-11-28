@@ -6,11 +6,12 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "errno.h"
 
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
-  uint pgdirs_link_counts[NPROC];
+  struct mm_struct mm[NPROC];
 } ptable;
 
 static struct proc *initproc;
@@ -74,18 +75,69 @@ found:
   return p;
 }
 
-uint*
-get_empty_pgdir_link_count(void)
+// Finds empty mm_struct (that is, that is not used by anyone),
+// sets its .users to 1 and returns it.
+struct mm_struct*
+get_empty_mm(void)
 {
   acquire(&ptable.lock);
-  for (int i = 0; i < NELEM(ptable.pgdirs_link_counts); ++i) {
-    if (ptable.pgdirs_link_counts[i] == 0) {
-      ptable.pgdirs_link_counts[i] = 1;
+  for (int i = 0; i < NELEM(ptable.mm); ++i) {
+    if (ptable.mm[i].users == 0) {
+      ptable.mm[i].users = 1;
+      ptable.mm[i].sz = 0;
+      ptable.mm[i].pgdir = 0;
       release(&ptable.lock);
-      return &ptable.pgdirs_link_counts[i];
+      return &ptable.mm[i];
     }
   }
+  return 0;
   release(&ptable.lock);
+}
+
+void
+free_mm(struct mm_struct* mm)
+{
+  if (mm->users == 1)
+  {
+    freevm(mm->pgdir);
+    mm->pgdir = 0;
+    mm->sz = 0;
+  }
+  mm->users--;
+}
+
+static struct mm_struct*
+setup_mm(void)
+{
+  struct mm_struct* mm = get_empty_mm();
+  if (!mm) return 0;
+  mm->pgdir = setupkvm();
+  if (!mm->pgdir) {
+    free_mm(mm);
+    return 0;
+  }
+  return mm;
+}
+
+static int
+copy_mm(unsigned int clone_flags, struct proc* p)
+{
+  struct mm_struct *mm, *old_mm;
+  old_mm = p->mm;
+  if (!old_mm) return 0;
+  if (clone_flags & CLONE_VM) {
+    p->mm->users++;
+    return 0;
+  }
+  mm = get_empty_mm();
+  if (!mm) return -ENOMEM;
+  mm->pgdir = copyuvm(old_mm->pgdir, old_mm->sz);
+  if (mm->pgdir == 0) {
+    free_mm(mm);
+    return -ENOMEM;
+  }
+  mm->sz = old_mm->sz;
+  p->mm = mm;
   return 0;
 }
 
@@ -99,11 +151,10 @@ userinit(void)
   
   p = allocproc();
   initproc = p;
-  if((p->pgdir = setupkvm()) == 0)
+  if((p->mm = setup_mm()) == 0)
     panic("userinit: out of memory?");
-  p->pgdir_link_count = get_empty_pgdir_link_count();
-  inituvm(p->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
-  p->sz = PGSIZE;
+  inituvm(p->mm->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
+  p->mm->sz = PGSIZE;
   memset(p->tf, 0, sizeof(*p->tf));
   p->tf->cs = (SEG_UCODE << 3) | DPL_USER;
   p->tf->ds = (SEG_UDATA << 3) | DPL_USER;
@@ -131,15 +182,15 @@ growproc(int n)
 {
   uint sz;
   
-  sz = proc->sz;
+  sz = proc->mm->sz;
   if(n > 0){
-    if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
+    if((sz = allocuvm(proc->mm->pgdir, sz, sz + n)) == 0)
       return -1;
   } else if(n < 0){
-    if((sz = deallocuvm(proc->pgdir, sz, sz + n)) == 0)
+    if((sz = deallocuvm(proc->mm->pgdir, sz, sz + n)) == 0)
       return -1;
   }
-  proc->sz = sz;
+  proc->mm->sz = sz;
   switchuvm(proc);
   return 0;
 }
@@ -155,17 +206,17 @@ fork(void)
 
   // Allocate process.
   if((np = allocproc()) == 0)
-    return -1;
+    return -ENOMEM;
 
   // Copy process state from p.
-  if((np->pgdir = copyuvm(proc->pgdir, proc->sz)) == 0){
+  int retval;
+  np->mm = proc->mm;
+  if((retval = copy_mm(0, np)) < 0){
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
-    return -1;
+    return retval;
   }
-  np->pgdir_link_count = get_empty_pgdir_link_count();
-  np->sz = proc->sz;
   np->parent = proc;
   *np->tf = *proc->tf;
 
@@ -205,13 +256,17 @@ clone(void* child_stack)
 
   // Allocate process.
   if((np = allocproc()) == 0)
-    return -1;
+    return -ENOMEM;
 
-  np->pgdir = proc->pgdir;
-  np->sz = proc->sz;
+  int retval;
+  np->mm = proc->mm;
+  if ((retval = copy_mm(CLONE_VM, np)) < 0) {
+    kfree(np->kstack);
+    np->kstack = 0;
+    np->state = UNUSED;
+    return retval;
+  }
   np->parent = proc;
-  np->pgdir_link_count = proc->pgdir_link_count;
-  (*np->pgdir_link_count)++;
   *np->tf = *proc->tf;
 
   // Clear %eax so that clone returns 0 in the child.
@@ -307,9 +362,7 @@ wait(void)
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
-        if (--(*p->pgdir_link_count) == 0) {
-          freevm(p->pgdir);
-        }
+        free_mm(p->mm);
         p->state = UNUSED;
         p->pid = 0;
         p->parent = 0;

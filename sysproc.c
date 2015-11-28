@@ -59,7 +59,7 @@ sys_sbrk(void)
 
   if(argint(0, &n) < 0)
     return -EINVAL;
-  addr = proc->sz;
+  addr = proc->mm->sz;
   if(growproc(n) < 0)
     return -ENOMEM;
   return addr;

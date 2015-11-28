@@ -29,7 +29,7 @@ _exec(char *path, char **argv, char **envp, int current_depth)
   struct elfhdr elf;
   struct inode *ip;
   struct proghdr ph;
-  pde_t *pgdir, *oldpgdir;
+  pde_t *pgdir;
   char* args[MAXARG + 3];
   char* progpath;
   char tmp[2];
@@ -207,17 +207,14 @@ exit:
     proc->ngroups = 0;
   }
   proc->echo_input = 1; // Clear echo_input flag for new process
-  oldpgdir = proc->pgdir;
-  int old_pgdir_link_count = --(*proc->pgdir_link_count);
-  proc->pgdir_link_count = get_empty_pgdir_link_count();
-  proc->pgdir = pgdir;
-  proc->sz = sz;
+  struct mm_struct* old_mm = proc->mm;
+  proc->mm = get_empty_mm();
+  proc->mm->pgdir = pgdir;
+  proc->mm->sz = sz;
   proc->tf->eip = elf.entry;  // main
   proc->tf->esp = sp;
   switchuvm(proc);
-  if (old_pgdir_link_count == 0) {
-    freevm(oldpgdir);
-  }
+  free_mm(old_mm);
   return 0;
 
  bad:

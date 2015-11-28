@@ -119,7 +119,8 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
-uint*           get_empty_pgdir_link_count(void);
+struct mm_struct* get_empty_mm(void);
+void            free_mm(struct mm_struct*);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
