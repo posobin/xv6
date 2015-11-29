@@ -17,7 +17,6 @@ struct proc_list {
 struct {
   struct spinlock lock;
   struct proc_list list;
-  struct mm_struct mm[NPROC];
 } ptable;
 
 static struct proc *initproc;
@@ -89,43 +88,30 @@ allocproc(void)
   return p;
 }
 
-// Finds empty mm_struct (that is, that is not used by anyone),
-// sets its .users to 1 and returns it.
-struct mm_struct*
-get_empty_mm(void)
-{
-  acquire(&ptable.lock);
-  for (int i = 0; i < NELEM(ptable.mm); ++i) {
-    if (ptable.mm[i].users == 0) {
-      ptable.mm[i].users = 1;
-      ptable.mm[i].sz = 0;
-      ptable.mm[i].pgdir = 0;
-      release(&ptable.lock);
-      return &ptable.mm[i];
-    }
-  }
-  return 0;
-  release(&ptable.lock);
-}
-
+// Decrease number of users of the memory map,
+// free memory when user count reaches 0.
 void
 free_mm(struct mm_struct* mm)
 {
-  if (mm->users == 1)
-  {
+  if (mm->users == 1) {
     freevm(mm->pgdir);
     mm->pgdir = 0;
     mm->sz = 0;
+    kfreee(mm, sizeof(struct mm_struct));
   }
-  mm->users--;
+  else {
+    mm->users--;
+  }
 }
 
 static struct mm_struct*
 setup_mm(void)
 {
-  struct mm_struct* mm = get_empty_mm();
+  struct mm_struct* mm = kmalloc(sizeof(struct mm_struct));
   if (!mm) return 0;
+  mm->users = 1;
   mm->pgdir = setupkvm();
+  mm->sz = PGSIZE;
   if (!mm->pgdir) {
     free_mm(mm);
     return 0;
@@ -143,8 +129,9 @@ copy_mm(unsigned int clone_flags, struct proc* p)
     p->mm->users++;
     return 0;
   }
-  mm = get_empty_mm();
+  mm = kmalloc(sizeof(struct mm_struct));
   if (!mm) return -ENOMEM;
+  mm->users = 1;
   mm->pgdir = copyuvm(old_mm->pgdir, old_mm->sz);
   if (mm->pgdir == 0) {
     free_mm(mm);

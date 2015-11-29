@@ -208,7 +208,8 @@ exit:
   }
   proc->echo_input = 1; // Clear echo_input flag for new process
   struct mm_struct* old_mm = proc->mm;
-  proc->mm = get_empty_mm();
+  proc->mm = kmalloc(sizeof(struct mm_struct));
+  proc->mm->users = 1;
   proc->mm->pgdir = pgdir;
   proc->mm->sz = sz;
   proc->tf->eip = elf.entry;  // main
