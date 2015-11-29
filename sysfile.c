@@ -28,8 +28,12 @@ argfd(int n, int *pfd, struct file **pf)
 
   if(argint(n, &fd) < 0)
     return -1;
-  if(fd < 0 || fd >= NOFILE || (f=proc->ofile[fd]) == 0)
+  acquire(&proc->files->lock);
+  if(fd < 0 || fd >= NOFILE || (f=proc->files->fd[fd]) == 0) {
+    release(&proc->files->lock);
     return -1;
+  }
+  release(&proc->files->lock);
   if(pfd)
     *pfd = fd;
   if(pf)
@@ -44,12 +48,15 @@ fdalloc(struct file *f)
 {
   int fd;
 
+  acquire(&proc->files->lock);
   for(fd = 0; fd < NOFILE; fd++){
-    if(proc->ofile[fd] == 0){
-      proc->ofile[fd] = f;
+    if(proc->files->fd[fd] == 0){
+      proc->files->fd[fd] = f;
+      release(&proc->files->lock);
       return fd;
     }
   }
+  release(&proc->files->lock);
   return -1;
 }
 
@@ -101,7 +108,9 @@ sys_close(void)
   
   if(argfd(0, &fd, &f) < 0)
     return -EBADF;
-  proc->ofile[fd] = 0;
+  acquire(&proc->files->lock);
+  proc->files->fd[fd] = 0;
+  release(&proc->files->lock);
   fileclose(f);
   return 0;
 }
@@ -417,8 +426,10 @@ sys_open(void)
     if(omode & O_NONBLOCK){
       if((omode & O_WRONLY) && p->readopen == 0){
         release(&p->lock);
+        acquire(&proc->files->lock);
+        proc->files->fd[fd] = 0;
+        release(&proc->files->lock);
         fileclose(f);
-        proc->ofile[fd] = 0;
         return -ENXIO;
       }
       if(omode & O_WRONLY) wakeup(&p->nread);
@@ -442,7 +453,9 @@ sys_open(void)
         wakeup(other_wakeup);
         release(&p->lock);
         fileclose(f);
-        proc->ofile[fd] = 0;
+        acquire(&proc->files->lock);
+        proc->files->fd[fd] = 0;
+        release(&proc->files->lock);
         return -ENOENT;
       }
       wakeup(other_wakeup);
@@ -619,8 +632,11 @@ sys_pipe(void)
     return status;
   fd0 = -1;
   if((fd0 = fdalloc(rf)) < 0 || (fd1 = fdalloc(wf)) < 0){
-    if(fd0 >= 0)
-      proc->ofile[fd0] = 0;
+    if(fd0 >= 0) {
+      acquire(&proc->files->lock);
+      proc->files->fd[fd0] = 0;
+      release(&proc->files->lock);
+    }
     fileclose(rf);
     fileclose(wf);
     return -EMFILE;

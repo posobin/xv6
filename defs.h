@@ -1,10 +1,11 @@
+#include "spinlock.h"
+
 struct buf;
 struct context;
 struct file;
 struct inode;
 struct pipe;
 struct proc;
-struct spinlock;
 struct stat;
 struct superblock;
 

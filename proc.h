@@ -1,3 +1,4 @@
+#include "spinlock.h"
 // Segments in proc->gdt.
 #define NSEGS     7
 
@@ -83,6 +84,12 @@ struct mm_struct {
   uint sz;       // Size of process memory (bytes)
 };
 
+struct files_struct {
+  struct file** fd;
+  struct spinlock lock;
+  int users; // Number of tasks using this files_struct
+};
+
 #define NGROUPS_MAX 16
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
@@ -98,7 +105,7 @@ struct proc {
   struct context *context;     // swtch() here to run process
   void *chan;                  // If non-zero, sleeping on chan
   int killed;                  // If non-zero, have been killed
-  struct file *ofile[NOFILE];  // Open files
+  struct files_struct* files;  // Open files
   struct inode *cwd;           // Current directory
   uid_t uid;                   // User ID
   uid_t euid;                  // Effective user ID
@@ -111,7 +118,6 @@ struct proc {
   uint ngroups;
   gid_t groups[NGROUPS_MAX];   // Supplementary groups that the current
                                // user (uid) belongs to
-  int echo_input;
 };
 
 // Process memory is laid out contiguously, low addresses first:

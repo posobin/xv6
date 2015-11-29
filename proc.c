@@ -156,6 +156,11 @@ userinit(void)
     panic("userinit: out of memory?");
   inituvm(p->mm->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
   p->mm->sz = PGSIZE;
+  p->files = kmalloc(sizeof(struct files_struct));
+  p->files->users = 1;
+  initlock(&p->files->lock, "proc->files");
+  p->files->fd = (struct file**)kalloc();
+  memset(p->files->fd, 0, PGSIZE);
   memset(p->tf, 0, sizeof(*p->tf));
   p->tf->cs = (SEG_UCODE << 3) | DPL_USER;
   p->tf->ds = (SEG_UDATA << 3) | DPL_USER;
@@ -224,9 +229,14 @@ fork(void)
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
 
+  np->files = kmalloc(sizeof(struct files_struct));
+  initlock(&np->files->lock, "proc->files");
+  np->files->users = 1;
+  np->files->fd = (struct file**)kalloc();
+  memset(np->files->fd, 0, PGSIZE);
   for(i = 0; i < NOFILE; i++)
-    if(proc->ofile[i])
-      np->ofile[i] = filedup(proc->ofile[i]);
+    if(proc->files->fd[i])
+      np->files->fd[i] = filedup(proc->files->fd[i]);
   np->cwd = idup(proc->cwd);
 
   np->uid = proc->uid;
@@ -242,7 +252,6 @@ fork(void)
     np->groups[i] = proc->groups[i];
   }
 
-  np->echo_input = proc->echo_input;
   pid = np->pid;
   np->state = RUNNABLE;
   safestrcpy(np->name, proc->name, sizeof(proc->name));
@@ -252,7 +261,7 @@ fork(void)
 int
 clone(void* child_stack)
 {
-  int i, pid;
+  int pid;
   struct proc *np;
 
   // Allocate process.
@@ -273,9 +282,8 @@ clone(void* child_stack)
   // Clear %eax so that clone returns 0 in the child.
   np->tf->eax = 0;
 
-  for(i = 0; i < NOFILE; i++)
-    if(proc->ofile[i])
-      np->ofile[i] = filedup(proc->ofile[i]);
+  np->files = proc->files;
+  np->files->users++;
   np->cwd = idup(proc->cwd);
 
   np->uid = proc->uid;
@@ -311,11 +319,19 @@ exit(void)
     panic("init exiting");
 
   // Close all open files.
+  acquire(&proc->files->lock);
   for(fd = 0; fd < NOFILE; fd++){
-    if(proc->ofile[fd]){
-      fileclose(proc->ofile[fd]);
-      proc->ofile[fd] = 0;
+    if(proc->files->fd[fd]){
+      fileclose(proc->files->fd[fd]);
+      proc->files->fd[fd] = 0;
     }
+  }
+  if (--proc->files->users == 0) {
+    kfree((char*)proc->files->fd);
+    release(&proc->files->lock);
+    kfreee(proc->files, sizeof(struct files_struct));
+  } else {
+    release(&proc->files->lock);
   }
 
   iput(proc->cwd);

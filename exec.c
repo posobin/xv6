@@ -206,7 +206,6 @@ exit:
     proc->egid = new_egid;
     proc->ngroups = 0;
   }
-  proc->echo_input = 1; // Clear echo_input flag for new process
   struct mm_struct* old_mm = proc->mm;
   proc->mm = kmalloc(sizeof(struct mm_struct));
   proc->mm->users = 1;
