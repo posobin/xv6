@@ -43,6 +43,9 @@ get_block(struct free_mem_list* mem_list)
     return result;
   }
   void* new_page = kalloc();
+  if (new_page == 0) {
+    return 0;
+  }
   mem_list->first_free_block = (struct free_block*)new_page;
   unsigned int block_size = mem_list->block_size;
   if (PGSIZE % block_size != 0) {
@@ -60,6 +63,9 @@ static void*
 alloc_block(int index) {
   acquire(&blocks_lock);
   struct free_block* result = get_block(&free_mem_list[index]);
+  if (result == 0) {
+    return 0;
+  }
   free_mem_list[index].first_free_block = result->next_block;
   result->next_block = 0;
   release(&blocks_lock);

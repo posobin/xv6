@@ -46,8 +46,11 @@ allocproc(void)
   struct proc *p;
   char *sp;
 
-  acquire(&ptable.lock);
   struct proc_list* new_entry = kmalloc(sizeof(struct proc_list));
+  if (new_entry == 0) {
+    return 0;
+  }
+  acquire(&ptable.lock);
   list_add(&new_entry->list_head, &ptable.list.list_head);
   p = &new_entry->proc;
 
@@ -55,7 +58,7 @@ allocproc(void)
   p->pid = nextpid++;
   release(&ptable.lock);
   // Put memset after release because we don’t want to hold
-  // lock for a long time.
+  // the lock for a long time.
   memset(p, 0, sizeof(*p));
   p->state = EMBRYO;
   p->pid = nextpid - 1;
@@ -63,6 +66,8 @@ allocproc(void)
   // Allocate kernel stack.
   if((p->kstack = kalloc()) == 0){
     p->state = UNUSED;
+    list_del(&new_entry->list_head);
+    kfreee(new_entry, sizeof(struct proc_list));
     return 0;
   }
   sp = p->kstack + KSTACKSIZE;
