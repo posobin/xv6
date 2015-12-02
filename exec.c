@@ -207,7 +207,7 @@ exit:
     proc->ngroups = 0;
   }
   struct mm_struct* old_mm = proc->mm;
-  proc->mm = kmalloc(sizeof(struct mm_struct));
+  proc->mm = kmem_cache_alloc(mm_cache);
   proc->mm->users = 1;
   proc->mm->pgdir = pgdir;
   proc->mm->sz = sz;

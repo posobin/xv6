@@ -12,10 +12,16 @@
 #include "errno.h"
 
 struct devsw devsw[NDEV];
+struct cache_info* file_cache;
 
 void
 fileinit(void)
-{ }
+{
+  file_cache = kmem_cache_create(sizeof(struct file));
+  if (file_cache == 0) {
+    panic("Could not allocate file cache");
+  }
+}
 
 // Allocate a file structure.
 struct file*
@@ -23,7 +29,7 @@ filealloc(void)
 {
   struct file *f;
 
-  f = kmalloc(sizeof(struct file));
+  f = kmem_cache_alloc(file_cache);
   memset(f, 0, sizeof(struct file));
   f->ref = 1;
   initlock(&f->lock, "file");
@@ -83,7 +89,7 @@ fileclose(struct file *f)
     return;
   }
   ff = *f;
-  kfreee(f, sizeof(struct file));
+  kmem_cache_free(f);
   release(&f->lock);
   
   if(ff.type == FD_FIFO && !readopen && !writeopen){

@@ -8,6 +8,8 @@ struct pipe;
 struct proc;
 struct stat;
 struct superblock;
+struct cache_info;
+struct list_head;
 
 // bio.c
 void            binit(void);
@@ -184,9 +186,19 @@ int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 
 // kmalloc.c
-void            init_blocks(void);
-void*           kmalloc(unsigned int size);
-void            kfreee(void* mem, unsigned int size);
+void            init_caches(void);
+struct cache_info* kmem_cache_create(unsigned int size);
+void*           kmem_cache_alloc(struct cache_info*);
+void            kmem_cache_free(void* mem);
+
+// list.c
+
+void            INIT_LIST_HEAD(struct list_head* list);
+void            list_add(struct list_head* new, struct list_head* head);
+void            list_add_tail(struct list_head* new, struct list_head* head);
+void            list_del(struct list_head* entry);
+void            list_del_init(struct list_head* entry);
+int             list_empty(struct list_head* head);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

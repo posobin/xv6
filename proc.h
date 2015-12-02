@@ -84,6 +84,8 @@ struct mm_struct {
   uint sz;       // Size of process memory (bytes)
 };
 
+extern struct cache_info* mm_cache;
+
 struct files_struct {
   struct file** fd;
   struct spinlock lock;

@@ -26,6 +26,7 @@ main(void)
   picinit();       // interrupt controller
   ioapicinit();    // another interrupt controller
   consoleinit();   // I/O devices & their interrupts
+  init_caches();   // memory cache init
   uartinit();      // serial port
   pinit();         // process table
   tvinit();        // trap vectors
@@ -37,7 +38,6 @@ main(void)
     timerinit();   // uniprocessor timer
   startothers();   // start other processors
   kinit2(P2V(4*1024*1024), P2V(PHYSTOP)); // must come after startothers()
-  init_blocks();
   userinit();      // first user process
   // Finish setting up this processor in mpmain.
   mpmain();
