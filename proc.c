@@ -68,6 +68,8 @@ allocproc(void)
   acquire(&ptable.lock);
   list_add(&new_entry->list, &ptable.list);
   p = &new_entry->proc;
+  INIT_LIST_HEAD(&p->children);
+  INIT_LIST_HEAD(&p->siblings);
 
   memset(p, 0, sizeof(*p));
   p->state = EMBRYO;
@@ -154,6 +156,31 @@ copy_mm(unsigned int clone_flags, struct proc* p)
   return 0;
 }
 
+static int
+copy_files(unsigned int clone_flags, struct proc* p)
+{
+  struct files_struct *files;
+  if (clone_flags & CLONE_FILES) {
+    p->files->users++;
+    return 0;
+  }
+  files = kmem_cache_alloc(files_struct_cache);
+  if (!files) return -ENOMEM;
+  initlock(&files->lock, "proc->files");
+  files->users = 1;
+  files->fd = (struct file**)kalloc();
+  if (!files->fd) {
+    kmem_cache_free(files);
+    return -ENOMEM;
+  }
+  memset(files->fd, 0, PGSIZE);
+  for(int i = 0; i < NOFILE; i++)
+    if(p->files->fd[i])
+      files->fd[i] = filedup(p->files->fd[i]);
+  p->files = files;
+  return 0;
+}
+
 //PAGEBREAK: 32
 // Set up first user process.
 void
@@ -213,65 +240,8 @@ growproc(int n)
   return 0;
 }
 
-// Create a new process copying p as the parent.
-// Sets up stack to return as if from system call.
-// Caller must set state of returned proc to RUNNABLE.
 int
-fork(void)
-{
-  int i, pid;
-  struct proc *np;
-
-  // Allocate process.
-  if((np = allocproc()) == 0)
-    return -ENOMEM;
-
-  // Copy process state from p.
-  int retval;
-  np->mm = proc->mm;
-  if((retval = copy_mm(0, np)) < 0){
-    kfree(np->kstack);
-    np->kstack = 0;
-    np->state = UNUSED;
-    return retval;
-  }
-  np->parent = proc;
-  *np->tf = *proc->tf;
-
-  // Clear %eax so that fork returns 0 in the child.
-  np->tf->eax = 0;
-
-  np->files = kmem_cache_alloc(files_struct_cache);
-  initlock(&np->files->lock, "proc->files");
-  np->files->users = 1;
-  np->files->fd = (struct file**)kalloc();
-  memset(np->files->fd, 0, PGSIZE);
-  for(i = 0; i < NOFILE; i++)
-    if(proc->files->fd[i])
-      np->files->fd[i] = filedup(proc->files->fd[i]);
-  np->cwd = idup(proc->cwd);
-
-  np->uid = proc->uid;
-  np->euid = proc->euid;
-  np->suid = proc->suid;
-  np->gid = proc->gid;
-  np->egid = proc->egid;
-  np->sgid = proc->sgid;
-  np->umask = proc->umask;
-
-  np->ngroups = proc->ngroups;
-  for (int i = 0; i < proc->ngroups; ++i) {
-    np->groups[i] = proc->groups[i];
-  }
-
-  pid = np->pid;
-  np->state = RUNNABLE;
-  safestrcpy(np->name, proc->name, sizeof(proc->name));
-  return pid;
-}
-
-int
-clone(void* child_stack)
+clone(void* child_stack, unsigned int clone_flags)
 {
   int pid;
   struct proc *np;
@@ -282,7 +252,15 @@ clone(void* child_stack)
 
   int retval;
   np->mm = proc->mm;
-  if ((retval = copy_mm(CLONE_VM, np)) < 0) {
+  if ((retval = copy_mm(clone_flags, np)) < 0) {
+    kfree(np->kstack);
+    np->kstack = 0;
+    np->state = UNUSED;
+    return retval;
+  }
+  np->files = proc->files;
+  if ((retval = copy_files(clone_flags, np)) < 0) {
+    free_mm(np->mm);
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
@@ -305,7 +283,9 @@ clone(void* child_stack)
   np->egid = proc->egid;
   np->sgid = proc->sgid;
   np->umask = proc->umask;
-  np->tf->esp = (uint)child_stack;
+  if (child_stack) {
+    np->tf->esp = (uint)child_stack;
+  }
 
   np->ngroups = proc->ngroups;
   for (int i = 0; i < proc->ngroups; ++i) {

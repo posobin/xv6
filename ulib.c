@@ -5,6 +5,7 @@
 #include "x86.h"
 #include "errno.h"
 #include "syscall.h"
+#include "clone_flags.h"
 
 char **environ = 0;
 
@@ -211,7 +212,8 @@ thread_create(int (*fn)(void*), void *arg)
       :"=a" (retval)
       :"0" (SYS_clone),"i" (SYS_exit),
       "r" (fn),
-      "b" (stack));
+      "b" (stack),
+      "c" (CLONE_VM | CLONE_FS | CLONE_FILES));
   if (retval < 0)
   {
     errno = -retval;

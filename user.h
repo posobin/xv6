@@ -39,7 +39,7 @@ int chmod(const char*, mode_t);
 int chown(const char*, uid_t, gid_t);
 int setgroups(uint, gid_t*);
 int getgroups(int, gid_t*);
-int clone(void*);
+int clone(void*, unsigned int);
 
 // ulib.c
 int stat(char*, struct stat*);

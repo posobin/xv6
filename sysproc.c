@@ -10,16 +10,18 @@
 int
 sys_fork(void)
 {
-  return fork();
+  return clone(0, 0);
 }
 
 int
 sys_clone(void)
 {
   char* stack;
-  if (argptr(0, &stack, 0) < 0)
+  int flags;
+  if (argptr(0, &stack, 0) < 0 ||
+      argint(1, &flags) < 0)
     return -EINVAL;
-  return clone(stack);
+  return clone(stack, flags);
 }
 
 int

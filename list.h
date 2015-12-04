@@ -1,3 +1,6 @@
+#ifndef XV6_LIST_H
+#define XV6_LIST_H
+
 #include "types.h"
 
 struct list_head {
@@ -14,3 +17,5 @@ struct list_head {
   for (pos = (head)->next, n = pos->next; \
       pos != (head); \
       pos = n, n = pos->next)
+
+#endif
