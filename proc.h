@@ -96,6 +96,8 @@ struct proc {
                                // user (uid) belongs to
   struct list_head children;   // List of our children
   struct list_head siblings;   // List of our siblings
+  struct proc* group_leader;   // Leader of our group
+  int tgid;                    // Thread group ID
 };
 
 // Process memory is laid out contiguously, low addresses first:

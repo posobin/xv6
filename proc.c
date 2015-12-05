@@ -66,12 +66,12 @@ allocproc(void)
     return 0;
   }
   acquire(&ptable.lock);
-  list_add(&new_entry->list, &ptable.list);
+  list_add_tail(&new_entry->list, &ptable.list);
   p = &new_entry->proc;
-  INIT_LIST_HEAD(&p->children);
-  INIT_LIST_HEAD(&p->siblings);
 
   memset(p, 0, sizeof(*p));
+  INIT_LIST_HEAD(&p->children);
+  INIT_LIST_HEAD(&p->siblings);
   p->state = EMBRYO;
   p->pid = nextpid++;
   release(&ptable.lock);
@@ -266,14 +266,16 @@ clone(void* child_stack, unsigned int clone_flags)
     np->state = UNUSED;
     return retval;
   }
-  np->parent = proc;
+  if (clone_flags & (CLONE_THREAD | CLONE_PARENT)) {
+    np->parent = proc->parent;
+  } else {
+    np->parent = proc;
+  }
   *np->tf = *proc->tf;
 
   // Clear %eax so that clone returns 0 in the child.
   np->tf->eax = 0;
 
-  np->files = proc->files;
-  np->files->users++;
   np->cwd = idup(proc->cwd);
 
   np->uid = proc->uid;
@@ -286,11 +288,21 @@ clone(void* child_stack, unsigned int clone_flags)
   if (child_stack) {
     np->tf->esp = (uint)child_stack;
   }
-
+  if (clone_flags & CLONE_THREAD) {
+    np->group_leader = proc;
+    np->tgid = proc->tgid;
+  } else {
+    np->group_leader = np;
+    np->tgid = np->pid;
+  }
   np->ngroups = proc->ngroups;
   for (int i = 0; i < proc->ngroups; ++i) {
     np->groups[i] = proc->groups[i];
   }
+
+  acquire(&ptable.lock);
+  list_add_tail(&np->siblings, &np->parent->children);
+  release(&ptable.lock);
 
   pid = np->pid;
   np->state = RUNNABLE;
@@ -336,13 +348,14 @@ exit(void)
 
   // Pass abandoned children to init.
   struct list_head *pos, *next;
-  list_for_each_safe(pos, next, &ptable.list) {
-    p = &list_entry(pos, struct proc_list, list)->proc;
-    if(p->parent == proc){
-      p->parent = initproc;
-      if(p->state == ZOMBIE)
-        wakeup1(initproc);
-    }
+  list_for_each_safe(pos, next, &proc->children) {
+    p = list_entry(pos, struct proc, siblings);
+    list_del(pos);
+    if (p->state == UNUSED) continue;
+    p->parent = initproc;
+    list_add_tail(pos, &initproc->children);
+    if(p->state == ZOMBIE)
+      wakeup1(initproc);
   }
 
   // Jump into the scheduler, never to return.
@@ -364,10 +377,8 @@ wait(void)
     // Scan through table looking for zombie children.
     havekids = 0;
     struct list_head *pos, *next;
-    list_for_each_safe(pos, next, &ptable.list) {
-      p = &list_entry(pos, struct proc_list, list)->proc;
-      if(p->parent != proc)
-        continue;
+    list_for_each_safe(pos, next, &proc->children) {
+      p = list_entry(pos, struct proc, siblings);
       havekids = 1;
       if(p->state == ZOMBIE){
         // Found one.
@@ -424,6 +435,7 @@ scheduler(void)
       if(p->state == UNUSED) {
         struct list_head* prev = pos;
         pos = pos->prev;
+        list_del(&p->siblings);
         list_del(prev);
         kmem_cache_free(list_entry(prev, struct proc_list, list));
         continue;
