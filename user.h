@@ -68,3 +68,4 @@ int exit(void) __attribute__((noreturn));
 // thread.c
 int thread_create(thread_t* thread, void* (*fn)(void*), void* arg, int);
 int thread_join(thread_t thread, void** retval);
+int thread_detach(thread_t thread);
