@@ -32,6 +32,13 @@ sys_exit(void)
 }
 
 int
+sys_exit_group(void)
+{
+  exit_group();
+  return 0;  // not reached
+}
+
+int
 sys_wait(void)
 {
   return wait();

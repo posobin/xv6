@@ -19,7 +19,7 @@
     ret
 
 SYSCALL(fork)
-SYSCALL(exit)
+SYSCALL(_exit)
 SYSCALL(wait)
 SYSCALL(pipe)
 SYSCALL(read)
@@ -52,3 +52,4 @@ SYSCALL(chown)
 SYSCALL(setgroups)
 SYSCALL(getgroups)
 SYSCALL(clone)
+SYSCALL(exit_group)

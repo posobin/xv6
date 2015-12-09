@@ -215,7 +215,7 @@ clone_fn(int (*fn)(void*), void* stack, void* arg)
       "int $0x40\n"   /* exit system call: exit subthread */
       "f1:\t"
       :"=a" (retval)
-      :"0" (SYS_clone),"i" (SYS_exit),
+      :"0" (SYS_clone),"i" (SYS__exit),
       "r" (fn),
       "b" (stack),
       "c" (CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_THREAD));
@@ -225,4 +225,10 @@ clone_fn(int (*fn)(void*), void* stack, void* arg)
     retval = -1;
   }
   return retval;
+}
+
+int
+exit(void)
+{
+  exit_group();
 }

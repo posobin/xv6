@@ -7,7 +7,7 @@ int errno;
 
 // system calls
 int fork(void);
-int exit(void) __attribute__((noreturn));
+int _exit(void) __attribute__((noreturn));
 int wait(void);
 int pipe(int*);
 int write(int, void*, int);
@@ -39,6 +39,7 @@ int chmod(const char*, mode_t);
 int chown(const char*, uid_t, gid_t);
 int setgroups(uint, gid_t*);
 int getgroups(int, gid_t*);
+int exit_group(void) __attribute__((noreturn));
 
 // ulib.c
 int stat(char*, struct stat*);
@@ -62,5 +63,8 @@ char* strchrnul(const char *s, int c);
 char* getenv(const char *name);
 int execvpe(const char *file, char *const argv[], char *const envp[]);
 int clone_fn(int (*start_routine)(void*), void* stack, void *arg);
+int exit(void) __attribute__((noreturn));
+
+// thread.c
 int thread_create(thread_t* thread, void* (*fn)(void*), void* arg, int);
 int thread_join(thread_t thread, void** retval);

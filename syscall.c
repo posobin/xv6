@@ -112,10 +112,11 @@ extern int sys_chown(void);
 extern int sys_setgroups(void);
 extern int sys_getgroups(void);
 extern int sys_clone(void);
+extern int sys_exit_group(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
-[SYS_exit]    sys_exit,
+[SYS__exit]   sys_exit,
 [SYS_wait]    sys_wait,
 [SYS_pipe]    sys_pipe,
 [SYS_read]    sys_read,
@@ -148,6 +149,7 @@ static int (*syscalls[])(void) = {
 [SYS_setgroups] sys_setgroups,
 [SYS_getgroups] sys_getgroups,
 [SYS_clone] sys_clone,
+[SYS_exit_group] sys_exit_group,
 };
 
 void

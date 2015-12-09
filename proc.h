@@ -97,9 +97,9 @@ struct proc {
   struct list_head children;   // List of our children
   struct list_head siblings;   // List of our siblings
   struct proc* group_leader;   // Leader of our group
+  struct list_head thread_group; // List of processess in the same thread group
   int tgid;                    // Thread group ID
-  int cloned;                  // Was this proc created by clone with
-                               // CLONE_THREAD?
+  int detached;                // Is thread detached?
 };
 
 // Process memory is laid out contiguously, low addresses first:

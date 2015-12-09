@@ -24,7 +24,7 @@ start_thread(void* arg)
   if (thread->detached) {
     free(thread->stack);
   }
-  return 0;
+  _exit();
 }
 
 #ifndef PGSIZE
@@ -70,5 +70,13 @@ thread_join(thread_t thread_id, void** retval)
   if (thread->stack != 0) {
     free(thread->stack);
   }
+  return 0;
+}
+
+int
+thread_detach(thread_t thread_id)
+{
+  struct thread* thread = (struct thread*)thread_id;
+  thread->detached = 1;
   return 0;
 }

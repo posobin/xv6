@@ -72,6 +72,7 @@ allocproc(void)
   memset(p, 0, sizeof(*p));
   INIT_LIST_HEAD(&p->children);
   INIT_LIST_HEAD(&p->siblings);
+  INIT_LIST_HEAD(&p->thread_group);
   p->state = EMBRYO;
   p->pid = nextpid++;
   release(&ptable.lock);
@@ -199,6 +200,7 @@ userinit(void)
   p->mm->sz = PGSIZE;
   p->files = kmem_cache_alloc(files_struct_cache);
   p->files->users = 1;
+  p->detached = 0;
   initlock(&p->files->lock, "proc->files");
   p->files->fd = (struct file**)kalloc();
   memset(p->files->fd, 0, PGSIZE);
@@ -291,14 +293,16 @@ clone(void* child_stack, unsigned int clone_flags)
     np->tf->esp = (uint)child_stack;
   }
   if (clone_flags & CLONE_THREAD) {
-    np->cloned = 1;
+    np->detached = 1;
   } else {
-    np->cloned = 0;
+    np->detached = 0;
   }
   if (clone_flags & CLONE_THREAD) {
-    np->group_leader = proc;
+    list_add_tail(&np->thread_group, &proc->group_leader->thread_group), 
+    np->group_leader = proc->group_leader;
     np->tgid = proc->tgid;
   } else {
+    INIT_LIST_HEAD(&np->thread_group);
     np->group_leader = np;
     np->tgid = np->pid;
   }
@@ -317,9 +321,10 @@ clone(void* child_stack, unsigned int clone_flags)
   return pid;
 }
 
-// Exit the current process.  Does not return.
+// Exit the specified process.
 // An exited process remains in the zombie state
-// until its parent calls wait() to find out it exited.
+// until its parent calls wait() to find out it exited (unless it was detached).
+// ptable.lock must be acquired before entering this function.
 void
 exit(void)
 {
@@ -351,24 +356,48 @@ exit(void)
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().
-  wakeup1(proc->parent);
+  if (!proc->detached) {
+    wakeup1(proc->parent);
+  }
 
   // Pass abandoned children to init.
   struct list_head *pos, *next;
+
   list_for_each_safe(pos, next, &proc->children) {
     p = list_entry(pos, struct proc, siblings);
     list_del(pos);
     if (p->state == UNUSED) continue;
     p->parent = initproc;
     list_add_tail(pos, &initproc->children);
-    if(p->state == ZOMBIE)
+    if (p->state == ZOMBIE && !p->detached)
       wakeup1(initproc);
   }
 
+  if (!proc->detached) {
+    proc->state = ZOMBIE;
+  } else {
+    // Free the process, nobody should wait for it.
+    proc->state = UNUSED;
+  }
   // Jump into the scheduler, never to return.
-  proc->state = ZOMBIE;
   sched();
   panic("zombie exit");
+}
+
+// Exit all the threads in the thread group of the current process.
+void
+exit_group(void)
+{
+  struct proc* p;
+  struct list_head *pos, *next;
+  acquire(&ptable.lock);
+  list_for_each_safe(pos, next, &proc->thread_group) {
+    p = list_entry(pos, struct proc, thread_group);
+    (void)p;
+    p->killed = 1;
+  }
+  release(&ptable.lock);
+  exit();
 }
 
 // Wait for a child process to exit and return its pid.
@@ -386,6 +415,7 @@ wait(void)
     struct list_head *pos, *next;
     list_for_each_safe(pos, next, &proc->children) {
       p = list_entry(pos, struct proc, siblings);
+      if (p->detached) continue;
       havekids = 1;
       if(p->state == ZOMBIE){
         // Found one.
@@ -393,6 +423,7 @@ wait(void)
         kfree(p->kstack);
         p->kstack = 0;
         free_mm(p->mm);
+        p->mm = 0;
         p->state = UNUSED;
         p->pid = 0;
         p->parent = 0;
@@ -439,15 +470,23 @@ scheduler(void)
     // so you’d better trust me.
     list_for_each(pos, &ptable.list) {
       p = &list_entry(pos, struct proc_list, list)->proc;
-      if(p->state == UNUSED) {
+      if (p->state == UNUSED) {
+        if (p->kstack != 0) {
+          kfree(p->kstack);
+          p->kstack = 0;
+        }
+        if (p->mm != 0) {
+          free_mm(p->mm);
+        }
         struct list_head* prev = pos;
         pos = pos->prev;
+        list_del(&p->thread_group);
         list_del(&p->siblings);
         list_del(prev);
         kmem_cache_free(list_entry(prev, struct proc_list, list));
         continue;
       }
-      if(p->state != RUNNABLE)
+      if (p->state != RUNNABLE)
         continue;
 
       // Switch to chosen process.  It is the process's job

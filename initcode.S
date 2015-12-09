@@ -16,7 +16,7 @@ start:
 
 # for(;;) exit();
 exit:
-  movl $SYS_exit, %eax
+  movl $SYS__exit, %eax
   int $T_SYSCALL
   jmp exit
 
