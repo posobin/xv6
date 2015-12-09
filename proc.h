@@ -98,6 +98,8 @@ struct proc {
   struct list_head siblings;   // List of our siblings
   struct proc* group_leader;   // Leader of our group
   int tgid;                    // Thread group ID
+  int cloned;                  // Was this proc created by clone with
+                               // CLONE_THREAD?
 };
 
 // Process memory is laid out contiguously, low addresses first:

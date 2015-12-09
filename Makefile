@@ -136,7 +136,7 @@ vectors.S: vectors.pl
 	perl vectors.pl > vectors.S
 
 ULIB = ulib.o usys.o printf.o umalloc.o md5.o pwd.o crt0.o libc-start.o uexec.o\
-	   grp.o
+	   grp.o thread.o
 
 _%: %.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e _start -Ttext 0 -o $@ $^

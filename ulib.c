@@ -190,16 +190,21 @@ getenv(const char *name)
   return 0;
 }
 
-#define STACKSIZE 1024
+#define STACKSIZE 4096
 
 int
-thread_create(int (*fn)(void*), void *arg)
+clone_fn(int (*fn)(void*), void* stack, void* arg)
 {
   int retval;
-  void** stack = (void**)malloc(STACKSIZE);
-  stack = (void**)((char*)stack + STACKSIZE);
-  *--stack = arg;
+  if (stack == 0)
+  {
+    stack = (void*)malloc(STACKSIZE);
+    stack = (void*)(stack + STACKSIZE);
+  }
+  stack = (void*)(((void**)stack) - 1);
+  *(void**)stack = arg;
   __asm__ __volatile__(
+      "pushl %5\n\t"
       "pushl %4\n\t"
       "pushl %1\n\t"
       "int $0x40\n\t"   /* xv6 system call */
@@ -213,7 +218,7 @@ thread_create(int (*fn)(void*), void *arg)
       :"0" (SYS_clone),"i" (SYS_exit),
       "r" (fn),
       "b" (stack),
-      "c" (CLONE_VM | CLONE_FS | CLONE_FILES));
+      "c" (CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_THREAD));
   if (retval < 0)
   {
     errno = -retval;

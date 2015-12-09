@@ -2,26 +2,26 @@
 #include "user.h"
 #include "fcntl.h"
 
-int
+void*
 function(void* ch)
 {
   printf(1, "in thread %d\n", ch);
-  return 10;
+  return ch;
 }
 
-const int NTHREADS = 80;
+const int NTHREADS = 10;
 
 int
 main()
 {
-  /*char cc[] = "ha";*/
+  thread_t threads[NTHREADS];
   for (int i = 0; i < NTHREADS; ++i) {
-    int pid = thread_create(function, (void*)i);
-    printf(1, "created thread with pid %d\n", pid);
-    printf(1, "errno: %d\n", errno);
+    thread_create(&threads[i], function, (void*)(i + 17), 0);
   }
   for (int i = 0; i < NTHREADS; ++i) {
-    wait();
+    int returned_value;
+    thread_join(threads[i], (void**)&returned_value);
+    printf(1, "Returned value by %d: %d\n", i, returned_value);
   }
   exit();
 }

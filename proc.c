@@ -108,7 +108,9 @@ void
 free_mm(struct mm_struct* mm)
 {
   if (mm->users == 1) {
-    freevm(mm->pgdir);
+    if (mm->pgdir != 0) {
+      freevm(mm->pgdir);
+    }
     mm->pgdir = 0;
     mm->sz = 0;
     kmem_cache_free(mm);
@@ -287,6 +289,11 @@ clone(void* child_stack, unsigned int clone_flags)
   np->umask = proc->umask;
   if (child_stack) {
     np->tf->esp = (uint)child_stack;
+  }
+  if (clone_flags & CLONE_THREAD) {
+    np->cloned = 1;
+  } else {
+    np->cloned = 0;
   }
   if (clone_flags & CLONE_THREAD) {
     np->group_leader = proc;
