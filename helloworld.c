@@ -5,13 +5,17 @@
 void*
 function(void* ch)
 {
-  if (((int)ch) % 100 == 0) {
+  if (((int)ch) == 20) {
     printf(1, "in thread %d\n", ch);
+    char* argv[] = {"ls", 0};
+    execvpe("ls", argv, environ);
+  } else {
+    sleep(20);
   }
   return ch;
 }
 
-const int NTHREADS = 5000;
+const int NTHREADS = 101;
 
 int
 main()
@@ -27,9 +31,7 @@ main()
   for (int j = 0; j < i; ++j) {
     int returned_value;
     thread_join(threads[j], (void**)&returned_value);
-    if (j % 100 == 0) {
-      printf(1, "Returned value by %d: %d\n", j, returned_value);
-    }
+    printf(1, "Returned value by %d: %d\n", j, returned_value);
   }
   free(threads);
   exit();

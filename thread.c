@@ -62,7 +62,9 @@ thread_join(thread_t thread_id, void** retval)
     errno = EINVAL;
     return -1;
   }
-  while (!thread->exited) { }
+  while (!thread->exited) {
+    sched_yield();
+  }
 
   if (retval != 0) {
     *retval = thread->result;

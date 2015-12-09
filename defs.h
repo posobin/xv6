@@ -110,6 +110,7 @@ int             pipewrite(struct pipe*, char*, int);
 struct proc*    copyproc(struct proc*);
 void            exit(void);
 void            exit_group(void);
+void            kill_other_threads_in_group(void);
 int             fork(void);
 int             clone(void*, unsigned int);
 int             growproc(int);

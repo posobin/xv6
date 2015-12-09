@@ -40,6 +40,7 @@ int chown(const char*, uid_t, gid_t);
 int setgroups(uint, gid_t*);
 int getgroups(int, gid_t*);
 int exit_group(void) __attribute__((noreturn));
+int sched_yield(void);
 
 // ulib.c
 int stat(char*, struct stat*);

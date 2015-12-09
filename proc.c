@@ -384,19 +384,23 @@ exit(void)
   panic("zombie exit");
 }
 
+void
+kill_other_threads_in_group(void)
+{
+  acquire(&ptable.lock);
+  struct list_head *pos, *next;
+  list_for_each_safe(pos, next, &proc->thread_group) {
+    struct proc* p = list_entry(pos, struct proc, thread_group);
+    p->killed = 1;
+  }
+  release(&ptable.lock);
+}
+
 // Exit all the threads in the thread group of the current process.
 void
 exit_group(void)
 {
-  struct proc* p;
-  struct list_head *pos, *next;
-  acquire(&ptable.lock);
-  list_for_each_safe(pos, next, &proc->thread_group) {
-    p = list_entry(pos, struct proc, thread_group);
-    (void)p;
-    p->killed = 1;
-  }
-  release(&ptable.lock);
+  kill_other_threads_in_group();
   exit();
 }
 
