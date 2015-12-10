@@ -20,6 +20,9 @@ main(void)
   dup(0);  // stdout
   dup(0);  // stderr
 
+  mkdir("/proc", 0555);
+  mount("/proc", "proc");
+
   for(;;){
     printf(1, "init: starting login\n");
     pid = fork();

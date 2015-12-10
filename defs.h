@@ -41,6 +41,7 @@ int             dirlink(struct inode*, char*, uint);
 struct inode*   dirlookup(struct inode*, char*, uint*);
 struct inode*   ialloc(uint, short);
 struct inode*   idup(struct inode*);
+struct inode*   iget(uint, uint);
 void            iinit(void);
 void            ilock(struct inode*);
 void            iput(struct inode*);
@@ -126,6 +127,8 @@ void            wakeup(void*);
 void            yield(void);
 struct mm_struct* get_empty_mm(void);
 void            free_mm(struct mm_struct*);
+int             procfs_root_read(struct inode*, char*, uint, uint);
+int             procfs_root_write(struct inode*, char*, uint, uint);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

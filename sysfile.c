@@ -18,6 +18,15 @@
 #include "stat.h"
 #include "err.h"
 
+static struct inode*
+create(char *path, short type, short major, short minor, uint mode);
+
+void
+fsinit(void)
+{
+  create("/proc", T_DIR, 0, 0, S_IRUGO | S_IXUGO);
+}
+
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -337,6 +346,29 @@ create(char *path, short type, short major, short minor, uint mode)
 }
 
 int
+sys_mount(void)
+{
+  char *target, *fstype;
+  if (argstr(0, &target) < 0 || argstr(1, &fstype) < 0) {
+    return -EINVAL;
+  }
+  if (strncmp(fstype, "proc", 5) != 0) {
+    return -EINVAL;
+  }
+  struct inode* ip;
+  if (IS_ERR(ip = namei(target))) {
+    return PTR_ERR(ip);
+  }
+  ilock(ip);
+  ip->readi = procfs_root_read;
+  ip->writei = procfs_root_write;
+  iunlock(ip);
+  // We should not do iput here.
+  // Otherwise, ip will be flushed out of the memory.
+  return 0;
+}
+
+int
 sys_open(void)
 {
   char *path;
@@ -347,7 +379,7 @@ sys_open(void)
   if(argstr(0, &path) < 0 || argint(1, &omode) < 0)
     return -EINVAL;
   ip = 0;
-  if(omode & O_CREATE && IS_ERR(ip = namei(path))){
+  if((omode & O_CREATE) && IS_ERR(ip = namei(path))){
     if(argint(2, &mode) < 0)
       return -EINVAL;
     begin_trans();

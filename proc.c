@@ -8,6 +8,7 @@
 #include "spinlock.h"
 #include "errno.h"
 #include "list.h"
+#include "fs.h"
 
 struct proc_list {
   struct list_head list;
@@ -648,6 +649,71 @@ kill(int pid)
   }
   release(&ptable.lock);
   return -1;
+}
+
+static void
+itoa(char* dst, int value)
+{
+  if (value < 0) {
+    *dst = '-';
+    value = -value;
+    dst++;
+  }
+  char* start = dst;
+  *dst++ = '0' + value % 10;
+  value /= 10;
+  while (value > 0) {
+    *dst++ = '0' + value % 10;
+    value /= 10;
+  }
+  *dst = '\0';
+  dst--;
+  while (dst > start)
+  {
+    char temp = *dst;
+    *dst = *start;
+    *start = temp;
+    start++;
+    dst--;
+  }
+}
+
+int
+procfs_root_read(struct inode* ip, char* dst, uint off, uint n)
+{
+  acquire(&ptable.lock);
+  struct list_head *pos;
+  uint current_position = 0;
+  uint written = 0;
+  uint last = n + off;
+  list_for_each(pos, &ptable.list) {
+    struct proc *p = &list_entry(pos, struct proc_list, list)->proc;
+    if (p->state == UNUSED) continue;
+    uint previous_position = current_position;
+    current_position += sizeof(struct dirent);
+    if (current_position <= off) continue;
+    if (last <= previous_position) break;
+    struct dirent entry;
+    itoa(entry.name, p->pid);
+    entry.inum = 1;
+    char* ptr = (char*)&entry;
+    int size = sizeof(struct dirent);
+    if (off > previous_position) {
+      ptr += off - previous_position;
+      size -= off - previous_position;
+    }
+    for (int i = 0; written < n && i < size; ++written, ++i) {
+      *dst++ = *ptr++;
+    }
+  }
+  release(&ptable.lock);
+  return written;
+}
+
+int
+procfs_root_write(struct inode* ip, char* dst, uint off, uint n)
+{
+  return 0;
 }
 
 //PAGEBREAK: 36

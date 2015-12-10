@@ -9,6 +9,8 @@ struct file {
   struct spinlock lock;
 };
 
+typedef int (*read_function)(struct inode*, char*, uint, uint);
+typedef int (*write_function)(struct inode*, char*, uint, uint);
 
 // in-memory copy of an inode
 struct inode {
@@ -25,6 +27,9 @@ struct inode {
   uint uid;
   uint gid;
   uint mode;
+
+  read_function readi;
+  write_function writei;
 
   // Two files for pipe, used only when type == T_PIPE
   struct file *read_file, *write_file;

@@ -41,6 +41,7 @@ int setgroups(uint, gid_t*);
 int getgroups(int, gid_t*);
 int exit_group(void) __attribute__((noreturn));
 int sched_yield(void);
+int mount(char*, char*);
 
 // ulib.c
 int stat(char*, struct stat*);

@@ -169,6 +169,11 @@ iinit(void)
   initlock(&icache.lock, "icache");
 }
 
+static int
+_readi(struct inode *ip, char *dst, uint off, uint n);
+static int
+_writei(struct inode *ip, char *dst, uint off, uint n);
+
 int
 type_to_mode(short type)
 {
@@ -185,7 +190,7 @@ type_to_mode(short type)
   return 0;
 }
 
-static struct inode* iget(uint dev, uint inum);
+struct inode* iget(uint dev, uint inum);
 
 //PAGEBREAK!
 // Allocate a new inode with the given type on device dev.
@@ -236,10 +241,22 @@ iupdate(struct inode *ip)
   brelse(bp);
 }
 
+void
+set_functions(struct inode* ip)
+{
+  if (ip->dev != PROCDEV) {
+    ip->readi = _readi;
+    ip->writei = _writei;
+  } else {
+    ip->readi = _readi;
+    ip->writei = _writei;
+  }
+}
+
 // Find the inode with number inum on device dev
 // and return the in-memory copy. Does not lock
 // the inode and does not read it from disk.
-static struct inode*
+struct inode*
 iget(uint dev, uint inum)
 {
   struct inode *ip, *empty;
@@ -269,6 +286,7 @@ iget(uint dev, uint inum)
   ip->flags = 0;
   ip->read_file = 0;
   ip->write_file = 0;
+  set_functions(ip);
   release(&icache.lock);
 
   return ip;
@@ -456,8 +474,8 @@ stati(struct inode *ip, struct stat *st)
 
 //PAGEBREAK!
 // Read data from inode.
-int
-readi(struct inode *ip, char *dst, uint off, uint n)
+static int
+_readi(struct inode *ip, char *dst, uint off, uint n)
 {
   uint tot, m;
   struct buf *bp;
@@ -482,10 +500,16 @@ readi(struct inode *ip, char *dst, uint off, uint n)
   return n;
 }
 
+int
+readi(struct inode *ip, char *dst, uint off, uint n)
+{
+  return ip->readi(ip, dst, off, n);
+}
+
 // PAGEBREAK!
 // Write data to inode.
-int
-writei(struct inode *ip, char *src, uint off, uint n)
+static int
+_writei(struct inode *ip, char *src, uint off, uint n)
 {
   uint tot, m;
   struct buf *bp;
@@ -514,6 +538,12 @@ writei(struct inode *ip, char *src, uint off, uint n)
     iupdate(ip);
   }
   return n;
+}
+
+int
+writei(struct inode *ip, char *dst, uint off, uint n)
+{
+  return ip->writei(ip, dst, off, n);
 }
 
 //PAGEBREAK!
