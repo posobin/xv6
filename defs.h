@@ -10,6 +10,7 @@ struct stat;
 struct superblock;
 struct cache_info;
 struct list_head;
+struct filesystem;
 
 // bio.c
 void            binit(void);
@@ -39,9 +40,10 @@ int             filewrite(struct file*, char*, int n);
 void            readsb(int dev, struct superblock *sb);
 int             dirlink(struct inode*, char*, uint);
 struct inode*   dirlookup(struct inode*, char*, uint*);
-struct inode*   ialloc(uint, short);
+struct inode*   ialloc(struct filesystem*, short);
 struct inode*   idup(struct inode*);
-struct inode*   iget(uint, uint);
+struct inode*   iget(struct filesystem*, uint);
+struct filesystem* find_fs(uint);
 void            iinit(void);
 void            ilock(struct inode*);
 void            iput(struct inode*);

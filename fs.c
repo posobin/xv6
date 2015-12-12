@@ -160,13 +160,54 @@ bfree(int dev, uint b)
 
 struct {
   struct spinlock lock;
-  struct inode inode[NINODE];
+  struct list_head list;
+  struct cache_info* cache;
+} fs_cache;
+
+struct {
+  struct spinlock lock;
+  struct list_head list;
+  struct cache_info* cache;
 } icache;
+
+void
+init_root_fs(struct filesystem* fs)
+{
+  acquire(&fs_cache.lock);
+  memset(fs, 0, sizeof(struct filesystem));
+  fs->index = ROOTDEV;
+  fs->dev = ROOTDEV;
+  list_add(&fs->list, &fs_cache.list);
+  release(&fs_cache.lock);
+}
+
+struct filesystem*
+find_fs(uint fs_index)
+{
+  acquire(&fs_cache.lock);
+  struct filesystem* fs;
+  list_for_each_entry(fs, &fs_cache.list, list) {
+    if (fs->index == fs_index) {
+      release(&fs_cache.lock);
+      return fs;
+    }
+  }
+  release(&fs_cache.lock);
+  return 0;
+}
 
 void
 iinit(void)
 {
   initlock(&icache.lock, "icache");
+  INIT_LIST_HEAD(&icache.list);
+  icache.cache = kmem_cache_create(sizeof(struct inode));
+  INIT_LIST_HEAD(&fs_cache.list);
+  fs_cache.cache = kmem_cache_create(sizeof(struct filesystem));
+
+  // Create ROOTDEV fs
+  struct filesystem* fs = kmem_cache_alloc(fs_cache.cache);
+  init_root_fs(fs);
 }
 
 static int
@@ -190,18 +231,19 @@ type_to_mode(short type)
   return 0;
 }
 
-struct inode* iget(uint dev, uint inum);
+struct inode* iget(struct filesystem* dev, uint inum);
 
 //PAGEBREAK!
 // Allocate a new inode with the given type on device dev.
 // A free inode has a type of zero.
 struct inode*
-ialloc(uint dev, short type)
+_ialloc(struct filesystem* fs, short type)
 {
   int inum;
   struct buf *bp;
   struct dinode *dip;
   struct superblock sb;
+  uint dev = fs->dev;
 
   readsb(dev, &sb);
 
@@ -213,21 +255,31 @@ ialloc(uint dev, short type)
       dip->type = type;
       log_write(bp);   // mark it allocated on the disk
       brelse(bp);
-      return iget(dev, inum);
+      return iget(fs, inum);
     }
     brelse(bp);
   }
   panic("ialloc: no inodes");
 }
 
+struct inode*
+ialloc(struct filesystem* fs, short type)
+{
+  if (fs->ops.alloc == 0) {
+    return _ialloc(fs, type);
+  } else {
+    return fs->ops.alloc(fs, type);
+  }
+}
+
 // Copy a modified in-memory inode to disk.
 void
-iupdate(struct inode *ip)
+_iupdate(struct inode *ip)
 {
   struct buf *bp;
   struct dinode *dip;
 
-  bp = bread(ip->dev, IBLOCK(ip->inum));
+  bp = bread(ip->fs->dev, IBLOCK(ip->inum));
   dip = (struct dinode*)bp->data + ip->inum%IPB;
   dip->major = ip->major;
   dip->minor = ip->minor;
@@ -242,14 +294,12 @@ iupdate(struct inode *ip)
 }
 
 void
-set_functions(struct inode* ip)
+iupdate(struct inode* ip)
 {
-  if (ip->dev != PROCDEV) {
-    ip->readi = _readi;
-    ip->writei = _writei;
+  if (ip->ops.update == 0) {
+    _iupdate(ip);
   } else {
-    ip->readi = _readi;
-    ip->writei = _writei;
+    ip->ops.update(ip);
   }
 }
 
@@ -257,7 +307,7 @@ set_functions(struct inode* ip)
 // and return the in-memory copy. Does not lock
 // the inode and does not read it from disk.
 struct inode*
-iget(uint dev, uint inum)
+_iget(struct filesystem* fs, uint inum)
 {
   struct inode *ip, *empty;
 
@@ -265,31 +315,44 @@ iget(uint dev, uint inum)
 
   // Is the inode already cached?
   empty = 0;
-  for(ip = &icache.inode[0]; ip < &icache.inode[NINODE]; ip++){
-    if(ip->ref > 0 && ip->dev == dev && ip->inum == inum){
+  list_for_each_entry(ip, &icache.list, list) {
+    if (ip->ref > 0 && ip->fs == fs && ip->inum == inum){
       ip->ref++;
       release(&icache.lock);
       return ip;
     }
-    if(empty == 0 && ip->ref == 0)    // Remember empty slot.
+    if (empty == 0 && ip->ref == 0) // Remember empty slot.
       empty = ip;
   }
-
-  // Recycle an inode cache entry.
-  if(empty == 0)
-    panic("iget: no inodes");
-
-  ip = empty;
-  ip->dev = dev;
+  if (empty == 0) {
+    ip = (struct inode*)kmem_cache_alloc(icache.cache);
+    if (ip == 0) {
+      panic("iget: no inodes");
+    }
+    list_add_tail(&ip->list, &icache.list);
+  } else {
+    ip = empty;
+  }
+  ip->fs = fs;
   ip->inum = inum;
   ip->ref = 1;
   ip->flags = 0;
   ip->read_file = 0;
   ip->write_file = 0;
-  set_functions(ip);
+  memset(&ip->ops, 0, sizeof(ip->ops));
   release(&icache.lock);
 
   return ip;
+}
+
+struct inode*
+iget(struct filesystem* fs, uint inum)
+{
+  if (fs->ops.get == 0) {
+    return _iget(fs, inum);
+  } else {
+    return fs->ops.get(fs, inum);
+  }
 }
 
 // Increment reference count for ip.
@@ -321,7 +384,7 @@ ilock(struct inode *ip)
   release(&icache.lock);
 
   if(!(ip->flags & I_VALID)){
-    bp = bread(ip->dev, IBLOCK(ip->inum));
+    bp = bread(ip->fs->dev, IBLOCK(ip->inum));
     dip = (struct dinode*)bp->data + ip->inum%IPB;
     ip->major = dip->major;
     ip->minor = dip->minor;
@@ -356,7 +419,7 @@ iunlock(struct inode *ip)
 // If that was the last reference and the inode has no links
 // to it, free the inode (and its content) on disk.
 void
-iput(struct inode *ip)
+_iput(struct inode *ip)
 {
   acquire(&icache.lock);
   if(ip->ref == 1 && (ip->flags & I_VALID) && ip->nlink == 0){
@@ -371,9 +434,21 @@ iput(struct inode *ip)
     acquire(&icache.lock);
     ip->flags = 0;
     wakeup(ip);
+    list_del(&ip->list);
+    kmem_cache_free(ip);
   }
   ip->ref--;
   release(&icache.lock);
+}
+
+void
+iput(struct inode* ip)
+{
+  if (ip->fs->ops.put == 0) {
+    _iput(ip);
+  } else {
+    ip->fs->ops.put(ip->fs, ip);
+  }
 }
 
 // Common idiom: unlock, then put.
@@ -402,7 +477,7 @@ bmap(struct inode *ip, uint bn)
 
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0)
-      ip->addrs[bn] = addr = balloc(ip->dev);
+      ip->addrs[bn] = addr = balloc(ip->fs->dev);
     return addr;
   }
   bn -= NDIRECT;
@@ -410,11 +485,11 @@ bmap(struct inode *ip, uint bn)
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
     if((addr = ip->addrs[NDIRECT]) == 0)
-      ip->addrs[NDIRECT] = addr = balloc(ip->dev);
-    bp = bread(ip->dev, addr);
+      ip->addrs[NDIRECT] = addr = balloc(ip->fs->dev);
+    bp = bread(ip->fs->dev, addr);
     a = (uint*)bp->data;
     if((addr = a[bn]) == 0){
-      a[bn] = addr = balloc(ip->dev);
+      a[bn] = addr = balloc(ip->fs->dev);
       log_write(bp);
     }
     brelse(bp);
@@ -438,20 +513,20 @@ itrunc(struct inode *ip)
 
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
-      bfree(ip->dev, ip->addrs[i]);
+      bfree(ip->fs->dev, ip->addrs[i]);
       ip->addrs[i] = 0;
     }
   }
   
   if(ip->addrs[NDIRECT]){
-    bp = bread(ip->dev, ip->addrs[NDIRECT]);
+    bp = bread(ip->fs->dev, ip->addrs[NDIRECT]);
     a = (uint*)bp->data;
     for(j = 0; j < NINDIRECT; j++){
       if(a[j])
-        bfree(ip->dev, a[j]);
+        bfree(ip->fs->dev, a[j]);
     }
     brelse(bp);
-    bfree(ip->dev, ip->addrs[NDIRECT]);
+    bfree(ip->fs->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
   }
 
@@ -463,7 +538,7 @@ itrunc(struct inode *ip)
 void
 stati(struct inode *ip, struct stat *st)
 {
-  st->dev = ip->dev;
+  st->dev = ip->fs->dev;
   st->ino = ip->inum;
   st->nlink = ip->nlink;
   st->size = ip->size;
@@ -492,7 +567,7 @@ _readi(struct inode *ip, char *dst, uint off, uint n)
     n = ip->size - off;
 
   for(tot=0; tot<n; tot+=m, off+=m, dst+=m){
-    bp = bread(ip->dev, bmap(ip, off/BSIZE));
+    bp = bread(ip->fs->dev, bmap(ip, off/BSIZE));
     m = min(n - tot, BSIZE - off%BSIZE);
     memmove(dst, bp->data + off%BSIZE, m);
     brelse(bp);
@@ -503,7 +578,11 @@ _readi(struct inode *ip, char *dst, uint off, uint n)
 int
 readi(struct inode *ip, char *dst, uint off, uint n)
 {
-  return ip->readi(ip, dst, off, n);
+  if (ip->ops.read == 0) {
+    return _readi(ip, dst, off, n);
+  } else {
+    return ip->ops.read(ip, dst, off, n);
+  }
 }
 
 // PAGEBREAK!
@@ -526,7 +605,7 @@ _writei(struct inode *ip, char *src, uint off, uint n)
     return -1;
 
   for(tot=0; tot<n; tot+=m, off+=m, src+=m){
-    bp = bread(ip->dev, bmap(ip, off/BSIZE));
+    bp = bread(ip->fs->dev, bmap(ip, off/BSIZE));
     m = min(n - tot, BSIZE - off%BSIZE);
     memmove(bp->data + off%BSIZE, src, m);
     log_write(bp);
@@ -543,7 +622,11 @@ _writei(struct inode *ip, char *src, uint off, uint n)
 int
 writei(struct inode *ip, char *dst, uint off, uint n)
 {
-  return ip->writei(ip, dst, off, n);
+  if (ip->ops.write == 0) {
+    return _writei(ip, dst, off, n);
+  } else {
+    return ip->ops.write(ip, dst, off, n);
+  }
 }
 
 //PAGEBREAK!
@@ -580,7 +663,7 @@ dirlookup(struct inode *dp, char *name, uint *poff)
       if(poff)
         *poff = off;
       inum = de.inum;
-      return iget(dp->dev, inum);
+      return iget(dp->fs, inum);
     }
   }
 
@@ -672,7 +755,7 @@ namex(char *path, int nameiparent, char *name)
   struct inode *ip, *next;
 
   if(*path == '/')
-    ip = iget(ROOTDEV, ROOTINO);
+    ip = iget(find_fs(ROOTDEV), ROOTINO);
   else
     ip = idup(proc->cwd);
 

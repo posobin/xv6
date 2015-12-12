@@ -18,15 +18,6 @@
 #include "stat.h"
 #include "err.h"
 
-static struct inode*
-create(char *path, short type, short major, short minor, uint mode);
-
-void
-fsinit(void)
-{
-  create("/proc", T_DIR, 0, 0, S_IRUGO | S_IXUGO);
-}
-
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -168,7 +159,7 @@ sys_link(void)
     goto bad;
   }
   ilock(dp);
-  if(dp->dev != ip->dev) {
+  if(dp->fs != ip->fs) {
     iunlockput(dp);
     status = EXDEV;
     goto bad;
@@ -308,7 +299,7 @@ create(char *path, short type, short major, short minor, uint mode)
     iunlock(dp);
     return ERR_PTR(-EPERM);
   }
-  if((ip = ialloc(dp->dev, type)) == 0)
+  if((ip = ialloc(dp->fs, type)) == 0)
     panic("create: ialloc");
 
   ilock(ip);
@@ -360,8 +351,9 @@ sys_mount(void)
     return PTR_ERR(ip);
   }
   ilock(ip);
-  ip->readi = procfs_root_read;
-  ip->writei = procfs_root_write;
+  ip->fs = find_fs(PROCDEV);
+  ip->ops.read = procfs_root_read;
+  ip->ops.write = procfs_root_write;
   iunlock(ip);
   // We should not do iput here.
   // Otherwise, ip will be flushed out of the memory.

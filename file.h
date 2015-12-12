@@ -1,3 +1,5 @@
+#include "list.h"
+
 struct file {
   enum { FD_NONE, FD_PIPE, FD_INODE, FD_FIFO } type;
   int ref; // reference count
@@ -9,15 +11,40 @@ struct file {
   struct spinlock lock;
 };
 
-typedef int (*read_function)(struct inode*, char*, uint, uint);
-typedef int (*write_function)(struct inode*, char*, uint, uint);
+struct filesystem;
+
+struct fs_operations
+{
+  struct inode* (*alloc)(struct filesystem*, short);
+  struct inode* (*get)(struct filesystem*, uint);
+  void (*put)(struct filesystem*, struct inode*);
+};
+
+struct filesystem
+{
+  uint index;
+  uint dev;
+  struct fs_operations ops;
+  struct list_head list;
+};
+
+struct inode_operations
+{
+  int (*read)(struct inode*, char*, uint, uint);
+  int (*write)(struct inode*, char*, uint, uint);
+  int (*permissions)(struct inode*);
+  int (*lookup)(struct inode*, struct inode*, char*);
+  int (*link)(struct inode*, struct inode*, char*);
+  int (*unlink)(struct inode*, char*);
+  void (*update)(struct inode*);
+};
 
 // in-memory copy of an inode
 struct inode {
-  uint dev;           // Device number
-  uint inum;          // Inode number
-  int ref;            // Reference count
-  int flags;          // I_BUSY, I_VALID
+  struct filesystem* fs; // File system containing this inode
+  uint inum;             // Inode number
+  int ref;               // Reference count
+  int flags;             // I_BUSY, I_VALID
 
   short major;
   short minor;
@@ -28,8 +55,10 @@ struct inode {
   uint gid;
   uint mode;
 
-  read_function readi;
-  write_function writei;
+  struct list_head list;
+  void* additional_info; // Additional info for the inode
+
+  struct inode_operations ops;
 
   // Two files for pipe, used only when type == T_PIPE
   struct file *read_file, *write_file;

@@ -9,6 +9,8 @@
 #include "errno.h"
 #include "list.h"
 #include "fs.h"
+#include "file.h"
+#include "stat.h"
 
 struct proc_list {
   struct list_head list;
@@ -20,11 +22,17 @@ struct {
   struct list_head list;
 } ptable;
 
+struct procfs_info {
+  enum { proc_dir, proc_stat } inode_type;
+  int pid;
+};
+
 static struct proc *initproc;
 
 struct cache_info* proc_list_cache;
 struct cache_info* mm_cache;
 struct cache_info* files_struct_cache;
+struct cache_info* procfs_info_cache;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -47,6 +55,10 @@ pinit(void)
   files_struct_cache = kmem_cache_create(sizeof(struct files_struct));
   if (files_struct_cache == 0) {
     panic("Could not allocate files_struct cache");
+  }
+  procfs_info_cache = kmem_cache_create(sizeof(struct procfs_info));
+  if (procfs_info_cache == 0) {
+    panic("Could not allocate procfs_info cache");
   }
   INIT_LIST_HEAD(&ptable.list);
 }
@@ -678,6 +690,94 @@ itoa(char* dst, int value)
   }
 }
 
+char*
+append(char* dest, char* src, int n)
+{
+  int i = 0;
+  while ((*dest++ = *src++) && i < n) {
+    i++;
+  }
+  if (i == n) {
+    *(dest - 1) = 0;
+  }
+  return dest;
+}
+
+int
+procfs_proc_file_read(struct inode* ip, char* dst, uint off, uint n)
+{
+  acquire(&ptable.lock);
+  uint pid = ((struct procfs_info*)ip->additional_info)->pid;
+  struct proc_list* pos;
+  struct proc* p = 0;
+  list_for_each_entry(pos, &ptable.list, list) {
+    if (pos->proc.pid == pid) {
+      p = &pos->proc;
+      break;
+    }
+  }
+  if (p == 0) {
+    release(&ptable.lock);
+    return 0;
+  }
+  char* string = kalloc();
+  char* original = string;
+  string = append(string, "Name: ", 20);
+  string = append(string, p->name, 17);
+  string = append(string, "\n", 2);
+
+  int length = string - original;
+  int last = off + n;
+  int count = 0;
+  for (int i = off; i < length && i < last; ++i, ++count) {
+    *dst++ = original[i];
+  }
+
+  kfree(original);
+  release(&ptable.lock);
+  return count;
+}
+
+int
+procfs_proc_file_write(struct inode* ip, char* dst, uint off, uint n)
+{
+  return 0;
+}
+
+int
+procfs_proc_dir_read(struct inode* ip, char* dst, uint off, uint n)
+{
+  acquire(&ptable.lock);
+  uint pid = ((struct procfs_info*)ip->additional_info)->pid;
+  struct dirent entry;
+  strncpy(entry.name, "status", 7);
+  struct inode* status = iget(find_fs(PROCDEV), pid * 2 + 1);
+  status->ops.read = procfs_proc_file_read;
+  status->ops.write = procfs_proc_file_write;
+  status->mode |= 0444;
+  status->mode |= S_IFREG;
+  status->flags = I_VALID;
+  entry.inum = pid * 2 + 1;
+  struct procfs_info* info = kmem_cache_alloc(procfs_info_cache);
+  info->pid = pid;
+  info->inode_type = proc_stat;
+  status->additional_info = info;
+  char* str = (char*)&entry;
+  int last = off + n;
+  int count = 0;
+  for (int i = off; i < sizeof(struct dirent) && i < last; ++i, ++count) {
+    *dst++ = *str++;
+  }
+  release(&ptable.lock);
+  return count;
+}
+
+int
+procfs_proc_dir_write(struct inode* ip, char* dst, uint off, uint n)
+{
+  return 0;
+}
+
 int
 procfs_root_read(struct inode* ip, char* dst, uint off, uint n)
 {
@@ -695,7 +795,18 @@ procfs_root_read(struct inode* ip, char* dst, uint off, uint n)
     if (last <= previous_position) break;
     struct dirent entry;
     itoa(entry.name, p->pid);
-    entry.inum = 1;
+    struct inode* ip = iget(find_fs(PROCDEV), p->pid * 2);
+    ip->ops.read = procfs_proc_dir_read;
+    ip->ops.write = procfs_proc_dir_write;
+    ip->mode |= 0555;
+    ip->mode |= S_IFDIR;
+    ip->flags = I_VALID;
+    ip->size = 3 * sizeof(struct dirent);
+    struct procfs_info* info = kmem_cache_alloc(procfs_info_cache);
+    info->pid = p->pid;
+    info->inode_type = proc_dir;
+    ip->additional_info = info;
+    entry.inum = p->pid * 2;
     char* ptr = (char*)&entry;
     int size = sizeof(struct dirent);
     if (off > previous_position) {
