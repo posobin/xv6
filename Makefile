@@ -29,6 +29,7 @@ OBJS = \
 	vm.o\
 	kmalloc.o\
 	list.o\
+	procfs.o\
 
 # Cross-compiling (e.g., on Mac OS X)
 #TOOLPREFIX = i386-jos-elf-
@@ -183,6 +184,7 @@ UPROGS=\
 	_chmod\
 	_chown\
 	_useradd\
+	_ps\
 
 passwd_file:
 	echo root::0:0:root:/root:/bin/sh > passwd_file

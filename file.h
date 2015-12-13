@@ -33,7 +33,7 @@ struct inode_operations
   int (*read)(struct inode*, char*, uint, uint);
   int (*write)(struct inode*, char*, uint, uint);
   int (*permissions)(struct inode*);
-  int (*lookup)(struct inode*, struct inode*, char*);
+  struct inode* (*lookup)(struct inode*, char*, uint*);
   int (*link)(struct inode*, struct inode*, char*);
   int (*unlink)(struct inode*, char*);
   void (*update)(struct inode*);
@@ -56,9 +56,9 @@ struct inode {
   uint mode;
 
   struct list_head list;
-  void* additional_info; // Additional info for the inode
 
   struct inode_operations ops;
+  void* additional_info;
 
   // Two files for pipe, used only when type == T_PIPE
   struct file *read_file, *write_file;

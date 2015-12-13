@@ -103,3 +103,13 @@ strlen(const char *s)
   return n;
 }
 
+int
+safestrlen(const char *s, int num)
+{
+  int n;
+
+  for(n = 0; s[n] && n < num; n++)
+    ;
+  return n;
+}
+

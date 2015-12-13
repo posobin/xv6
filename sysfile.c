@@ -299,8 +299,9 @@ create(char *path, short type, short major, short minor, uint mode)
     iunlock(dp);
     return ERR_PTR(-EPERM);
   }
-  if((ip = ialloc(dp->fs, type)) == 0)
-    panic("create: ialloc");
+  if((ip = ialloc(dp->fs, type)) == 0) {
+    return ERR_PTR(-EIO);
+  }
 
   ilock(ip);
   ip->major = major;
@@ -328,8 +329,10 @@ create(char *path, short type, short major, short minor, uint mode)
     iupdate(ip);
   }
 
-  if(dirlink(dp, name, ip->inum) < 0)
-    panic("create: dirlink");
+  int retval = dirlink(dp, name, ip->inum);
+  if(retval < 0) {
+    return ERR_PTR(retval);
+  }
 
   iunlockput(dp);
 
@@ -350,14 +353,13 @@ sys_mount(void)
   if (IS_ERR(ip = namei(target))) {
     return PTR_ERR(ip);
   }
-  ilock(ip);
-  ip->fs = find_fs(PROCDEV);
-  ip->ops.read = procfs_root_read;
-  ip->ops.write = procfs_root_write;
-  iunlock(ip);
-  // We should not do iput here.
-  // Otherwise, ip will be flushed out of the memory.
-  return 0;
+  if (proc->euid != 0) {
+    return -EPERM;
+  }
+  struct inode* parent;
+  char name[20];
+  parent = nameiparent(target, name);
+  return mount_proc_fs(ip, parent);
 }
 
 int

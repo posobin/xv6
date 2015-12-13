@@ -12,27 +12,13 @@
 #include "file.h"
 #include "stat.h"
 
-struct proc_list {
-  struct list_head list;
-  struct proc proc;
-};
-
-struct {
-  struct spinlock lock;
-  struct list_head list;
-} ptable;
-
-struct procfs_info {
-  enum { proc_dir, proc_stat } inode_type;
-  int pid;
-};
+struct ptable ptable;
 
 static struct proc *initproc;
 
-struct cache_info* proc_list_cache;
+struct cache_info* proc_cache;
 struct cache_info* mm_cache;
 struct cache_info* files_struct_cache;
-struct cache_info* procfs_info_cache;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -44,9 +30,9 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
-  proc_list_cache = kmem_cache_create(sizeof(struct proc_list));
-  if (proc_list_cache == 0) {
-    panic("Could not allocate proc_list cache");
+  proc_cache = kmem_cache_create(sizeof(struct proc));
+  if (proc_cache == 0) {
+    panic("Could not allocate proc cache");
   }
   mm_cache = kmem_cache_create(sizeof(struct mm_struct));
   if (mm_cache == 0) {
@@ -55,10 +41,6 @@ pinit(void)
   files_struct_cache = kmem_cache_create(sizeof(struct files_struct));
   if (files_struct_cache == 0) {
     panic("Could not allocate files_struct cache");
-  }
-  procfs_info_cache = kmem_cache_create(sizeof(struct procfs_info));
-  if (procfs_info_cache == 0) {
-    panic("Could not allocate procfs_info cache");
   }
   INIT_LIST_HEAD(&ptable.list);
 }
@@ -71,18 +53,17 @@ pinit(void)
 static struct proc*
 allocproc(void)
 {
-  struct proc *p;
   char *sp;
 
-  struct proc_list* new_entry = kmem_cache_alloc(proc_list_cache);
-  if (new_entry == 0) {
+  struct proc* p = kmem_cache_alloc(proc_cache);
+  if (p == 0) {
     return 0;
   }
   acquire(&ptable.lock);
-  list_add_tail(&new_entry->list, &ptable.list);
-  p = &new_entry->proc;
-
   memset(p, 0, sizeof(*p));
+
+  list_add_tail(&p->list, &ptable.list);
+
   INIT_LIST_HEAD(&p->children);
   INIT_LIST_HEAD(&p->siblings);
   INIT_LIST_HEAD(&p->thread_group);
@@ -93,8 +74,8 @@ allocproc(void)
   // Allocate kernel stack.
   if((p->kstack = kalloc()) == 0){
     p->state = UNUSED;
-    list_del(&new_entry->list);
-    kmem_cache_free(new_entry);
+    list_del(&p->list);
+    kmem_cache_free(p);
     return 0;
   }
   sp = p->kstack + KSTACKSIZE;
@@ -486,7 +467,7 @@ scheduler(void)
     // why, but I have spent around ten hours debugging this,
     // so you’d better trust me.
     list_for_each(pos, &ptable.list) {
-      p = &list_entry(pos, struct proc_list, list)->proc;
+      p = list_entry(pos, struct proc, list);
       if (p->state == UNUSED) {
         if (p->kstack != 0) {
           kfree(p->kstack);
@@ -500,7 +481,7 @@ scheduler(void)
         list_del(&p->thread_group);
         list_del(&p->siblings);
         list_del(prev);
-        kmem_cache_free(list_entry(prev, struct proc_list, list));
+        kmem_cache_free(list_entry(prev, struct proc, list));
         continue;
       }
       if (p->state != RUNNABLE)
@@ -622,7 +603,7 @@ wakeup1(void *chan)
   /*for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)*/
   struct list_head *pos, *next;
   list_for_each_safe(pos, next, &ptable.list) {
-    p = &list_entry(pos, struct proc_list, list)->proc;
+    p = list_entry(pos, struct proc, list);
     if(p->state == SLEEPING && p->chan == chan)
       p->state = RUNNABLE;
   }
@@ -637,6 +618,22 @@ wakeup(void *chan)
   release(&ptable.lock);
 }
 
+struct proc*
+get_proc_by_pid(int pid)
+{
+  struct proc *p;
+
+  acquire(&ptable.lock);
+  list_for_each_entry(p, &ptable.list, list) {
+    if(p->pid == pid){
+      release(&ptable.lock);
+      return p;
+    }
+  }
+  release(&ptable.lock);
+  return 0;
+}
+
 // Kill the process with the given pid.
 // Process won't exit until it returns
 // to user space (see trap in trap.c).
@@ -646,10 +643,9 @@ kill(int pid)
   struct proc *p;
 
   acquire(&ptable.lock);
-  /*for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){*/
   struct list_head *pos, *next;
   list_for_each_safe(pos, next, &ptable.list) {
-    p = &list_entry(pos, struct proc_list, list)->proc;
+    p = list_entry(pos, struct proc, list);
     if(p->pid == pid){
       p->killed = 1;
       // Wake process from sleep if necessary.
@@ -661,170 +657,6 @@ kill(int pid)
   }
   release(&ptable.lock);
   return -1;
-}
-
-static void
-itoa(char* dst, int value)
-{
-  if (value < 0) {
-    *dst = '-';
-    value = -value;
-    dst++;
-  }
-  char* start = dst;
-  *dst++ = '0' + value % 10;
-  value /= 10;
-  while (value > 0) {
-    *dst++ = '0' + value % 10;
-    value /= 10;
-  }
-  *dst = '\0';
-  dst--;
-  while (dst > start)
-  {
-    char temp = *dst;
-    *dst = *start;
-    *start = temp;
-    start++;
-    dst--;
-  }
-}
-
-char*
-append(char* dest, char* src, int n)
-{
-  int i = 0;
-  while ((*dest++ = *src++) && i < n) {
-    i++;
-  }
-  if (i == n) {
-    *(dest - 1) = 0;
-  }
-  return dest;
-}
-
-int
-procfs_proc_file_read(struct inode* ip, char* dst, uint off, uint n)
-{
-  acquire(&ptable.lock);
-  uint pid = ((struct procfs_info*)ip->additional_info)->pid;
-  struct proc_list* pos;
-  struct proc* p = 0;
-  list_for_each_entry(pos, &ptable.list, list) {
-    if (pos->proc.pid == pid) {
-      p = &pos->proc;
-      break;
-    }
-  }
-  if (p == 0) {
-    release(&ptable.lock);
-    return 0;
-  }
-  char* string = kalloc();
-  char* original = string;
-  string = append(string, "Name: ", 20);
-  string = append(string, p->name, 17);
-  string = append(string, "\n", 2);
-
-  int length = string - original;
-  int last = off + n;
-  int count = 0;
-  for (int i = off; i < length && i < last; ++i, ++count) {
-    *dst++ = original[i];
-  }
-
-  kfree(original);
-  release(&ptable.lock);
-  return count;
-}
-
-int
-procfs_proc_file_write(struct inode* ip, char* dst, uint off, uint n)
-{
-  return 0;
-}
-
-int
-procfs_proc_dir_read(struct inode* ip, char* dst, uint off, uint n)
-{
-  acquire(&ptable.lock);
-  uint pid = ((struct procfs_info*)ip->additional_info)->pid;
-  struct dirent entry;
-  strncpy(entry.name, "status", 7);
-  struct inode* status = iget(find_fs(PROCDEV), pid * 2 + 1);
-  status->ops.read = procfs_proc_file_read;
-  status->ops.write = procfs_proc_file_write;
-  status->mode |= 0444;
-  status->mode |= S_IFREG;
-  status->flags = I_VALID;
-  entry.inum = pid * 2 + 1;
-  struct procfs_info* info = kmem_cache_alloc(procfs_info_cache);
-  info->pid = pid;
-  info->inode_type = proc_stat;
-  status->additional_info = info;
-  char* str = (char*)&entry;
-  int last = off + n;
-  int count = 0;
-  for (int i = off; i < sizeof(struct dirent) && i < last; ++i, ++count) {
-    *dst++ = *str++;
-  }
-  release(&ptable.lock);
-  return count;
-}
-
-int
-procfs_proc_dir_write(struct inode* ip, char* dst, uint off, uint n)
-{
-  return 0;
-}
-
-int
-procfs_root_read(struct inode* ip, char* dst, uint off, uint n)
-{
-  acquire(&ptable.lock);
-  struct list_head *pos;
-  uint current_position = 0;
-  uint written = 0;
-  uint last = n + off;
-  list_for_each(pos, &ptable.list) {
-    struct proc *p = &list_entry(pos, struct proc_list, list)->proc;
-    if (p->state == UNUSED) continue;
-    uint previous_position = current_position;
-    current_position += sizeof(struct dirent);
-    if (current_position <= off) continue;
-    if (last <= previous_position) break;
-    struct dirent entry;
-    itoa(entry.name, p->pid);
-    struct inode* ip = iget(find_fs(PROCDEV), p->pid * 2);
-    ip->ops.read = procfs_proc_dir_read;
-    ip->ops.write = procfs_proc_dir_write;
-    ip->mode |= 0555;
-    ip->mode |= S_IFDIR;
-    ip->flags = I_VALID;
-    ip->size = 3 * sizeof(struct dirent);
-    struct procfs_info* info = kmem_cache_alloc(procfs_info_cache);
-    info->pid = p->pid;
-    info->inode_type = proc_dir;
-    ip->additional_info = info;
-    entry.inum = p->pid * 2;
-    char* ptr = (char*)&entry;
-    int size = sizeof(struct dirent);
-    if (off > previous_position) {
-      ptr += off - previous_position;
-      size -= off - previous_position;
-    }
-    for (int i = 0; written < n && i < size; ++written, ++i) {
-      *dst++ = *ptr++;
-    }
-  }
-  release(&ptable.lock);
-  return written;
-}
-
-int
-procfs_root_write(struct inode* ip, char* dst, uint off, uint n)
-{
-  return 0;
 }
 
 //PAGEBREAK: 36
@@ -850,7 +682,7 @@ procdump(void)
   /*for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){*/
   struct list_head *pos, *next;
   list_for_each_safe(pos, next, &ptable.list) {
-    p = &list_entry(pos, struct proc_list, list)->proc;
+    p = list_entry(pos, struct proc, list);
     if(p->state == UNUSED)
       continue;
     if(p->state >= 0 && p->state < NELEM(states) && states[p->state])

@@ -39,6 +39,7 @@ int             filewrite(struct file*, char*, int n);
 // fs.c
 void            readsb(int dev, struct superblock *sb);
 int             dirlink(struct inode*, char*, uint);
+struct inode*   _dirlookup(struct inode*, char*, uint*);
 struct inode*   dirlookup(struct inode*, char*, uint*);
 struct inode*   ialloc(struct filesystem*, short);
 struct inode*   idup(struct inode*);
@@ -129,8 +130,7 @@ void            wakeup(void*);
 void            yield(void);
 struct mm_struct* get_empty_mm(void);
 void            free_mm(struct mm_struct*);
-int             procfs_root_read(struct inode*, char*, uint, uint);
-int             procfs_root_write(struct inode*, char*, uint, uint);
+struct proc*    get_proc_by_pid(int);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -150,6 +150,7 @@ void*           memmove(void*, const void*, uint);
 void*           memset(void*, int, uint);
 char*           safestrcpy(char*, const char*, int);
 int             strlen(const char*);
+int             safestrlen(const char*, int);
 int             strncmp(const char*, const char*, uint);
 char*           strncpy(char*, const char*, int);
 
@@ -206,6 +207,9 @@ void            list_add_tail(struct list_head* new, struct list_head* head);
 void            list_del(struct list_head* entry);
 void            list_del_init(struct list_head* entry);
 int             list_empty(struct list_head* head);
+
+// procfs.c
+int mount_proc_fs(struct inode* ip, struct inode* parent);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

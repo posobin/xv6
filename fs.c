@@ -181,6 +181,29 @@ init_root_fs(struct filesystem* fs)
   release(&fs_cache.lock);
 }
 
+static void
+procfs_put(struct filesystem* fs, struct inode *ip)
+{ }
+
+struct inode*
+procfs_alloc(struct filesystem* fs, short type)
+{
+  return 0;
+}
+
+void
+init_proc_fs(struct filesystem* fs)
+{
+  acquire(&fs_cache.lock);
+  memset(fs, 0, sizeof(struct filesystem));
+  fs->index = PROCDEV;
+  fs->dev = PROCDEV;
+  fs->ops.put = procfs_put;
+  fs->ops.alloc = procfs_alloc;
+  list_add(&fs->list, &fs_cache.list);
+  release(&fs_cache.lock);
+}
+
 struct filesystem*
 find_fs(uint fs_index)
 {
@@ -206,8 +229,11 @@ iinit(void)
   fs_cache.cache = kmem_cache_create(sizeof(struct filesystem));
 
   // Create ROOTDEV fs
-  struct filesystem* fs = kmem_cache_alloc(fs_cache.cache);
-  init_root_fs(fs);
+  struct filesystem* root_fs = kmem_cache_alloc(fs_cache.cache);
+  init_root_fs(root_fs);
+  // Create procfs
+  struct filesystem* proc_fs = kmem_cache_alloc(fs_cache.cache);
+  init_proc_fs(proc_fs);
 }
 
 static int
@@ -333,10 +359,14 @@ _iget(struct filesystem* fs, uint inum)
   } else {
     ip = empty;
   }
+  struct list_head tmp = ip->list;
+  memset(ip, 0, sizeof(*ip));
+  ip->list = tmp;
   ip->fs = fs;
   ip->inum = inum;
   ip->ref = 1;
   ip->flags = 0;
+  ip->mode = 0;
   ip->read_file = 0;
   ip->write_file = 0;
   memset(&ip->ops, 0, sizeof(ip->ops));
@@ -641,7 +671,7 @@ namecmp(const char *s, const char *t)
 // Look for a directory entry in a directory.
 // If found, set *poff to byte offset of entry.
 struct inode*
-dirlookup(struct inode *dp, char *name, uint *poff)
+_dirlookup(struct inode *dp, char *name, uint *poff)
 {
   uint off, inum;
   struct dirent de;
@@ -668,6 +698,16 @@ dirlookup(struct inode *dp, char *name, uint *poff)
   }
 
   return ERR_PTR(-ENOENT);
+}
+
+struct inode*
+dirlookup(struct inode* dp, char* name, uint* poff)
+{
+  if (dp->ops.lookup == 0) {
+    return _dirlookup(dp, name, poff);
+  } else {
+    return dp->ops.lookup(dp, name, poff);
+  }
 }
 
 // Write a new directory entry (name, inum) into the directory dp.
@@ -700,8 +740,9 @@ dirlink(struct inode *dp, char *name, uint inum)
 
   strncpy(de.name, name, DIRSIZ);
   de.inum = inum;
-  if(writei(dp, (char*)&de, off, sizeof(de)) != sizeof(de))
-    panic("dirlink");
+  if(writei(dp, (char*)&de, off, sizeof(de)) != sizeof(de)) {
+    return -EIO;
+  }
   
   return 0;
 }
@@ -775,9 +816,9 @@ namex(char *path, int nameiparent, char *name)
       iunlock(ip);
       return ip;
     }
-    if((next = dirlookup(ip, name, 0)) == 0){
+    if(IS_ERR(next = dirlookup(ip, name, 0))){
       iunlockput(ip);
-      return ERR_PTR(-ENOENT);
+      return next;
     }
     iunlockput(ip);
     ip = next;

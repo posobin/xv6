@@ -1,6 +1,7 @@
 #include "spinlock.h"
 #include "list.h"
 #include "clone_flags.h"
+#include "param.h"
 // Segments in proc->gdt.
 #define NSEGS     7
 
@@ -100,7 +101,16 @@ struct proc {
   struct list_head thread_group; // List of processess in the same thread group
   int tgid;                    // Thread group ID
   int detached;                // Is thread detached?
+
+  struct list_head list;
 };
+
+struct ptable {
+  struct spinlock lock;
+  struct list_head list;
+};
+
+extern struct ptable ptable;
 
 // Process memory is laid out contiguously, low addresses first:
 //   text
