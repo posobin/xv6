@@ -291,12 +291,11 @@ clone(void* child_stack, unsigned int clone_flags)
   } else {
     np->detached = 0;
   }
+  INIT_LIST_HEAD(&np->thread_group);
   if (clone_flags & CLONE_THREAD) {
-    list_add_tail(&np->thread_group, &proc->group_leader->thread_group), 
     np->group_leader = proc->group_leader;
     np->tgid = proc->tgid;
   } else {
-    INIT_LIST_HEAD(&np->thread_group);
     np->group_leader = np;
     np->tgid = np->pid;
   }
@@ -306,6 +305,9 @@ clone(void* child_stack, unsigned int clone_flags)
   }
 
   acquire(&ptable.lock);
+  if (clone_flags & CLONE_THREAD) {
+    list_add_tail(&np->thread_group, &proc->thread_group);
+  }
   list_add_tail(&np->siblings, &np->parent->children);
   release(&ptable.lock);
 
@@ -382,10 +384,11 @@ void
 kill_other_threads_in_group(void)
 {
   acquire(&ptable.lock);
-  struct list_head *pos, *next;
-  list_for_each_safe(pos, next, &proc->thread_group) {
-    struct proc* p = list_entry(pos, struct proc, thread_group);
+  struct proc* p;
+  list_for_each_entry(p, &proc->thread_group, thread_group) {
     p->killed = 1;
+    if(p->state == SLEEPING)
+      p->state = RUNNABLE;
   }
   release(&ptable.lock);
 }

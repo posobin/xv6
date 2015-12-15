@@ -228,7 +228,8 @@ free_page_block(void* block, struct page_header* page_header)
   page_header->empty_block = block;
   struct cache_info* cache_info = page_header->cache_info;
   unsigned int block_size = cache_info->block_size;
-  if (++page_header->empty_count == get_number_of_blocks(block_size)) {
+  page_header->empty_count += 1;
+  if (page_header->empty_count == get_number_of_blocks(block_size)) {
     // All the blocks in the page are free, we will free the page now.
     list_del(&page_header->list);
     kfree((void*)PGROUNDDOWN((unsigned int)block));

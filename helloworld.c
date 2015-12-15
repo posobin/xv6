@@ -8,14 +8,14 @@ function(void* ch)
   if (((int)ch) == 20) {
     printf(1, "in thread %d\n", ch);
     char* argv[] = {"ls", 0};
-    execvpe("ls", argv, environ);
+    execvpe("helloworld", argv, environ);
   } else {
     sleep(20);
   }
   return ch;
 }
 
-const int NTHREADS = 101;
+const int NTHREADS = 300;
 
 int
 main()
