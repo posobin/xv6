@@ -211,6 +211,7 @@ exit:
   proc->tgid = proc->pid;
   struct mm_struct* old_mm = proc->mm;
   proc->mm = kmem_cache_alloc(mm_cache);
+  initlock(&proc->mm->lock, "proc->mm");
   proc->mm->users = 1;
   proc->mm->pgdir = pgdir;
   proc->mm->sz = sz;

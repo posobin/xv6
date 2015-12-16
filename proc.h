@@ -57,6 +57,7 @@ struct mm_struct {
   pde_t* pgdir;  // Page table
   uint users; // Number of links to the page table
   uint sz;       // Size of process memory (bytes)
+  struct spinlock lock;
 };
 
 extern struct cache_info* mm_cache;
@@ -64,7 +65,15 @@ extern struct cache_info* mm_cache;
 struct files_struct {
   struct file** fd;
   struct spinlock lock;
-  int users; // Number of tasks using this files_struct
+  uint users; // Number of tasks using this files_struct
+};
+
+struct fs_info_struct {
+  struct inode* root;          // Current root directory
+  struct inode* cwd;           // Current directory
+  uint umask;                  // File mode creation mask
+  uint users;
+  struct spinlock lock;
 };
 
 #define NGROUPS_MAX 16
@@ -83,14 +92,13 @@ struct proc {
   void *chan;                  // If non-zero, sleeping on chan
   int killed;                  // If non-zero, have been killed
   struct files_struct* files;  // Open files
-  struct inode *cwd;           // Current directory
+  struct fs_info_struct* fs;   // Cwd, current root, umask
   uid_t uid;                   // User ID
   uid_t euid;                  // Effective user ID
   uid_t suid;                  // Saved UID
   gid_t gid;                   // Group ID
   gid_t egid;                  // Effective group ID
   gid_t sgid;                  // Saved GID
-  uint umask;                  // File mode creation mask
   char name[16];               // Process name (debugging)
   uint ngroups;
   gid_t groups[NGROUPS_MAX];   // Supplementary groups that the current

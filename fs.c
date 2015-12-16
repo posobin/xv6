@@ -795,10 +795,16 @@ namex(char *path, int nameiparent, char *name)
 {
   struct inode *ip, *next;
 
-  if(*path == '/')
-    ip = iget(find_fs(ROOTDEV), ROOTINO);
+  if(*path == '/') {
+    if (proc) {
+      ip = idup(proc->fs->root);
+    } else {
+      // proc is zero when calling namei() in userinit.
+      ip = iget(find_fs(ROOTDEV), ROOTINO);
+    }
+  }
   else
-    ip = idup(proc->cwd);
+    ip = idup(proc->fs->cwd);
 
   while((path = skipelem(path, name)) != 0){
     ilock(ip);

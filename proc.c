@@ -19,6 +19,7 @@ static struct proc *initproc;
 struct cache_info* proc_cache;
 struct cache_info* mm_cache;
 struct cache_info* files_struct_cache;
+struct cache_info* fs_info_cache;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -41,6 +42,10 @@ pinit(void)
   files_struct_cache = kmem_cache_create(sizeof(struct files_struct));
   if (files_struct_cache == 0) {
     panic("Could not allocate files_struct cache");
+  }
+  fs_info_cache = kmem_cache_create(sizeof(struct fs_info_struct));
+  if (fs_info_cache == 0) {
+    panic("Could not allocate fs_info_struct cache");
   }
   INIT_LIST_HEAD(&ptable.list);
 }
@@ -102,24 +107,27 @@ allocproc(void)
 void
 free_mm(struct mm_struct* mm)
 {
-  if (mm->users == 1) {
+  acquire(&mm->lock);
+  if (--mm->users == 0) {
     if (mm->pgdir != 0) {
       freevm(mm->pgdir);
     }
     mm->pgdir = 0;
     mm->sz = 0;
+    release(&mm->lock);
     kmem_cache_free(mm);
-  }
-  else {
-    mm->users--;
+  } else {
+    release(&mm->lock);
   }
 }
 
+// For use in userinit() only.
 static struct mm_struct*
 setup_mm(void)
 {
   struct mm_struct* mm = kmem_cache_alloc(mm_cache);
   if (!mm) return 0;
+  initlock(&mm->lock, "proc->mm");
   mm->users = 1;
   mm->pgdir = setupkvm();
   mm->sz = PGSIZE;
@@ -133,22 +141,27 @@ setup_mm(void)
 static int
 copy_mm(unsigned int clone_flags, struct proc* p)
 {
-  struct mm_struct *mm, *old_mm;
-  old_mm = p->mm;
-  if (!old_mm) return 0;
+  struct mm_struct *mm;
+  if (!p->mm) return 0;
   if (clone_flags & CLONE_VM) {
+    acquire(&p->mm->lock);
     p->mm->users++;
+    release(&p->mm->lock);
     return 0;
   }
   mm = kmem_cache_alloc(mm_cache);
   if (!mm) return -ENOMEM;
+  initlock(&mm->lock, "proc->mm");
   mm->users = 1;
-  mm->pgdir = copyuvm(old_mm->pgdir, old_mm->sz);
-  if (mm->pgdir == 0) {
+  acquire(&p->mm->lock);
+  mm->pgdir = copyuvm(p->mm->pgdir, p->mm->sz);
+  if (p->mm->pgdir == 0) {
+    release(&p->mm->lock);
     free_mm(mm);
     return -ENOMEM;
   }
-  mm->sz = old_mm->sz;
+  mm->sz = p->mm->sz;
+  release(&p->mm->lock);
   p->mm = mm;
   return 0;
 }
@@ -158,7 +171,9 @@ copy_files(unsigned int clone_flags, struct proc* p)
 {
   struct files_struct *files;
   if (clone_flags & CLONE_FILES) {
+    acquire(&p->files->lock);
     p->files->users++;
+    release(&p->files->lock);
     return 0;
   }
   files = kmem_cache_alloc(files_struct_cache);
@@ -171,11 +186,71 @@ copy_files(unsigned int clone_flags, struct proc* p)
     return -ENOMEM;
   }
   memset(files->fd, 0, PGSIZE);
+  acquire(&p->files->lock);
   for(int i = 0; i < NOFILE; i++)
     if(p->files->fd[i])
       files->fd[i] = filedup(p->files->fd[i]);
+  release(&p->files->lock);
   p->files = files;
   return 0;
+}
+
+static void
+free_files(struct files_struct* files)
+{
+  acquire(&files->lock);
+  if (--files->users == 0) {
+    for (int fd = 0; fd < NOFILE; fd++){
+      if(files->fd[fd]){
+        fileclose(files->fd[fd]);
+        files->fd[fd] = 0;
+      }
+    }
+    kfree((char*)files->fd);
+    release(&files->lock);
+    kmem_cache_free(files);
+  } else {
+    release(&files->lock);
+  }
+}
+
+static int
+copy_fs_info(unsigned int clone_flags, struct proc* p)
+{
+  struct fs_info_struct* fs_info;
+  if (clone_flags & CLONE_FS) {
+    acquire(&p->fs->lock);
+    p->fs->users++;
+    release(&p->fs->lock);
+    return 0;
+  }
+  fs_info = kmem_cache_alloc(fs_info_cache);
+  if (!fs_info) return -ENOMEM;
+  initlock(&fs_info->lock, "proc->fs");
+  fs_info->users = 1;
+  acquire(&p->fs->lock);
+  fs_info->root = idup(p->fs->root);
+  fs_info->cwd = idup(p->fs->cwd);
+  fs_info->umask = p->fs->umask;
+  release(&p->fs->lock);
+  p->fs = fs_info;
+  return 0;
+}
+
+static void
+free_fs_info(struct fs_info_struct* fs_info)
+{
+  acquire(&fs_info->lock);
+  if (--fs_info->users == 0) {
+    iput(fs_info->cwd);
+    iput(fs_info->root);
+    fs_info->cwd = 0;
+    fs_info->root = 0;
+    release(&fs_info->lock);
+    kmem_cache_free(fs_info);
+  } else {
+    release(&fs_info->lock);
+  }
 }
 
 //PAGEBREAK: 32
@@ -208,12 +283,17 @@ userinit(void)
   p->tf->eip = 0;  // beginning of initcode.S
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
-  p->cwd = namei("/");
+  p->fs = kmem_cache_alloc(fs_info_cache);
+  p->fs->root = 0;
+  p->fs->cwd = namei("/");
+  p->fs->root = namei("/");
+  p->fs->users = 1;
+  p->fs->umask = 0;
+  initlock(&p->fs->lock, "proc->fs");
   p->uid = 0;
   p->euid = 0;
   p->gid = 0;
   p->egid = 0;
-  p->umask = 0;
 
   p->state = RUNNABLE;
 }
@@ -264,6 +344,15 @@ clone(void* child_stack, unsigned int clone_flags)
     np->state = UNUSED;
     return retval;
   }
+  np->fs = proc->fs;
+  if ((retval = copy_fs_info(clone_flags, np)) < 0) {
+    free_mm(np->mm);
+    free_files(np->files);
+    kfree(np->kstack);
+    np->kstack = 0;
+    np->state = UNUSED;
+    return retval;
+  }
   if (clone_flags & (CLONE_THREAD | CLONE_PARENT)) {
     np->parent = proc->parent;
   } else {
@@ -274,15 +363,12 @@ clone(void* child_stack, unsigned int clone_flags)
   // Clear %eax so that clone returns 0 in the child.
   np->tf->eax = 0;
 
-  np->cwd = idup(proc->cwd);
-
   np->uid = proc->uid;
   np->euid = proc->euid;
   np->suid = proc->suid;
   np->gid = proc->gid;
   np->egid = proc->egid;
   np->sgid = proc->sgid;
-  np->umask = proc->umask;
   if (child_stack) {
     np->tf->esp = (uint)child_stack;
   }
@@ -325,29 +411,14 @@ void
 exit(void)
 {
   struct proc *p;
-  int fd;
 
   if(proc == initproc)
     panic("init exiting");
 
   // Close all open files.
-  acquire(&proc->files->lock);
-  if (--proc->files->users == 0) {
-    for(fd = 0; fd < NOFILE; fd++){
-      if(proc->files->fd[fd]){
-        fileclose(proc->files->fd[fd]);
-        proc->files->fd[fd] = 0;
-      }
-    }
-    kfree((char*)proc->files->fd);
-    release(&proc->files->lock);
-    kmem_cache_free(proc->files);
-  } else {
-    release(&proc->files->lock);
-  }
+  free_files(proc->files);
 
-  iput(proc->cwd);
-  proc->cwd = 0;
+  free_fs_info(proc->fs);
 
   acquire(&ptable.lock);
 

@@ -309,7 +309,7 @@ create(char *path, short type, short major, short minor, uint mode)
   ip->nlink = 1;
   ip->uid = proc->euid;
   ip->gid = proc->egid;
-  ip->mode = (mode & (~(proc->umask)));
+  ip->mode = (mode & (~(proc->fs->umask)));
   ip->mode |= type_to_mode(type);
   iupdate(ip);
 
@@ -599,8 +599,8 @@ sys_chdir(void)
     return -ENOTDIR;
   }
   iunlock(ip);
-  iput(proc->cwd);
-  proc->cwd = ip;
+  iput(proc->fs->cwd);
+  proc->fs->cwd = ip;
   return 0;
 }
 
@@ -678,8 +678,8 @@ sys_umask()
   int new_value, old_value;
   if(argint(0, &new_value) < 0)
     return -EINVAL;
-  old_value = ((proc->umask) & 0777);
-  proc->umask = new_value;
+  old_value = ((proc->fs->umask) & 0777);
+  proc->fs->umask = new_value;
   return old_value;
 }
 
