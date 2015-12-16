@@ -207,6 +207,8 @@ exit:
     proc->ngroups = 0;
   }
   kill_other_threads_in_group();
+  proc->group_leader = proc;
+  proc->tgid = proc->pid;
   struct mm_struct* old_mm = proc->mm;
   proc->mm = kmem_cache_alloc(mm_cache);
   proc->mm->users = 1;
