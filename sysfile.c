@@ -605,6 +605,32 @@ sys_chdir(void)
 }
 
 int
+sys_chroot(void)
+{
+  char *path;
+  struct inode *ip;
+
+  if (argstr(0, &path) < 0) {
+    return -EINVAL;
+  }
+  if (proc->euid != 0) {
+    return -EPERM;
+  }
+  if (IS_ERR(ip = namei(path))) {
+    return PTR_ERR(ip);
+  }
+  ilock(ip);
+  if (!S_ISDIR(ip->mode)){
+    iunlockput(ip);
+    return -ENOTDIR;
+  }
+  iunlock(ip);
+  iput(proc->fs->root);
+  proc->fs->root = ip;
+  return 0;
+}
+
+int
 sys_execve(void)
 {
   char *path, *argv[MAXARG], *envp[MAXARG];

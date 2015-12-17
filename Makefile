@@ -185,6 +185,7 @@ UPROGS=\
 	_chown\
 	_useradd\
 	_ps\
+	_chroot\
 
 passwd_file:
 	echo root::0:0:root:/root:/bin/sh > passwd_file

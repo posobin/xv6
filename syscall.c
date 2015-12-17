@@ -115,6 +115,7 @@ extern int sys_clone(void);
 extern int sys_exit_group(void);
 extern int sys_sched_yield(void);
 extern int sys_mount(void);
+extern int sys_chroot(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -154,6 +155,7 @@ static int (*syscalls[])(void) = {
 [SYS_exit_group] sys_exit_group,
 [SYS_sched_yield] sys_sched_yield,
 [SYS_mount] sys_mount,
+[SYS_chroot] sys_chroot,
 };
 
 void

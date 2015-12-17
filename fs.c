@@ -826,8 +826,12 @@ namex(char *path, int nameiparent, char *name)
       iunlockput(ip);
       return next;
     }
-    iunlockput(ip);
-    ip = next;
+    if(ip == proc->fs->root && namecmp(name, "..") == 0){
+      iunlock(ip);
+    } else {
+      iunlockput(ip);
+      ip = next;
+    }
   }
   if(nameiparent){
     iput(ip);

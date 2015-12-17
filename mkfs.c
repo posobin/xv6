@@ -106,6 +106,13 @@ struct disk_file files[] =
   {"_usertests",  "bin/usertests",   S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_useradd",    "bin/useradd",     S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_ps",         "bin/ps",          S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_chroot",     "bin/chroot",      S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"",            "test",            DEFAULT_DIR, 0, 0},
+  {"",            "test/chroot",     DEFAULT_DIR, 0, 0},
+  {"",            "test/chroot/bin", DEFAULT_DIR, 0, 0},
+  {"_sh",         "test/chroot/bin/sh", S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_ls",         "test/chroot/bin/ls", S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_mkdir",      "test/chroot/bin/mkdir", S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
 };
 
 int added_inode_numbers[NELEM(files)];

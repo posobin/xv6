@@ -36,3 +36,4 @@
 #define SYS_exit_group  35
 #define SYS_sched_yield 36
 #define SYS_mount       37
+#define SYS_chroot      38
