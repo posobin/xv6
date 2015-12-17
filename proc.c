@@ -721,6 +721,14 @@ kill(int pid)
   list_for_each_safe(pos, next, &ptable.list) {
     p = list_entry(pos, struct proc, list);
     if(p->pid == pid){
+      if (proc->euid != 0 &&
+          proc->uid != p->uid &&
+          proc->uid != p->suid &&
+          proc->euid != p->uid &&
+          proc->euid != p->suid) {
+        release(&ptable.lock);
+        return -EPERM;
+      }
       p->killed = 1;
       // Wake process from sleep if necessary.
       if(p->state == SLEEPING)
@@ -730,7 +738,7 @@ kill(int pid)
     }
   }
   release(&ptable.lock);
-  return -1;
+  return -ESRCH;
 }
 
 //PAGEBREAK: 36
