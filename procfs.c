@@ -251,7 +251,7 @@ procfs_proc_dir_lookup(struct inode* ip, char* name, uint* poff)
 {
   struct inode* result = ERR_PTR(-ENOENT);
   if (namecmp(name, ".") == 0) {
-    return ip;
+    return idup(ip);
   } else if (namecmp(name, "..") == 0) {
     return iget(ip->fs, (uint)ip->additional_info);
   } else if (namecmp(name, "parent") == 0) {
@@ -346,9 +346,9 @@ struct inode*
 procfs_root_lookup(struct inode* ip, char* name, uint* poff)
 {
   if (namecmp(name, ".") == 0) {
-    return ip;
+    return idup(ip);
   } else if (namecmp(name, "..") == 0) {
-    return _dirlookup(ip, name, poff);
+    return iget(find_fs(ROOTDEV), (uint)ip->additional_info);
   }
   uint pid = atoi(name, 10);
   if (pid == 0) {
