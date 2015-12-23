@@ -219,6 +219,7 @@ exit:
   proc->tf->eip = elf.entry;  // main
   proc->tf->esp = sp;
   switchuvm(proc);
+  free_mmaps(old_mm);
   free_mm(old_mm);
   return 0;
 

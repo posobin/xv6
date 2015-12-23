@@ -200,8 +200,9 @@ add_mmap_to_mm(struct mm_struct* mm, struct mmap_struct* mmap)
     return -1;
   }
   *copy = *mmap;
-  /*mmap_inc_buf_counts(copy);*/
-  /*char* start = mmap->start;*/
+  if (copy->file != 0) {
+    copy->file = filedup(mmap->file);
+  }
   list_add_tail(&copy->list, &mm->mmap_list);
   return 0;
 }
@@ -234,7 +235,7 @@ copy_mm(unsigned int clone_flags, struct proc* p)
   struct list_head* list;
   list_for_each(list, &p->mm->mmap_list) {
     struct mmap_struct* mmap = list_entry(list, struct mmap_struct, list);
-    if (add_mmap_to_mm(p->mm, mmap) < 0) {
+    if (add_mmap_to_mm(mm, mmap) < 0) {
       release(&p->mm->lock);
       return -ENOMEM;
     }

@@ -134,6 +134,7 @@ void            free_mm(struct mm_struct*);
 struct proc*    get_proc_by_pid(int);
 void*           mmap(void*, int, int, int, struct file*, int);
 int             handle_pagefault(uint, uint);
+void            free_mmaps(struct mm_struct* mm);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
