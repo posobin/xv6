@@ -827,6 +827,9 @@ mmap(void* addr, int length, int prot, int flags, struct file* file,
     int offset)
 {
   int current_length = 0;
+  if (file->type != FD_INODE) {
+    return ERR_PTR(-EACCES);
+  }
   if (((prot & PROT_READ) && !(file->readable)) ||
       ((prot & PROT_WRITE) && !(file->writable))) {
     return ERR_PTR(-EACCES);
@@ -853,6 +856,10 @@ mmap(void* addr, int length, int prot, int flags, struct file* file,
   file->off = offset;
   fileread(file, mmap->start, length);
   file->off = initial_offset;
+  uint permissions = PTE_P;
+  if ((prot & PROT_READ) || (prot & PROT_EXEC)) {
+    permissions |= PTE_U;
+  }
   for (current_length = 0; current_length < length;
       current_length += PGSIZE) {
     if (!set_pte_permissions(proc->mm->pgdir, addr + current_length,
