@@ -115,15 +115,25 @@ free_mmaps(struct mm_struct* mm)
   struct list_head *pos, *next;
   list_for_each_safe(pos, next, &mm->mmap_list) {
     struct mmap_struct* mmap = list_entry(pos, struct mmap_struct, list);
+    // Obviously, we need acquire.
+    // Placing release right after list_del is safe, because nobody
+    // else will know that that mmap exists.
+    // Release is needed, because otherwise filewrite would panic when
+    // it tries to sleep.
+    acquire(&mmap->lock);
     list_del(&mmap->list);
+    release(&mmap->lock);
     for (uint i = (uint)mmap->start;
         i < PGROUNDUP((uint)mmap->start + mmap->length);
         i += PGSIZE) {
+      if ((mmap->prot & MAP_SHARED) == 0) {
+        break;
+      }
       int is_last_page =
         (i + PGSIZE >= PGROUNDUP((uint)mmap->start + mmap->length));
       int perm = get_pte_permissions(mm->pgdir, (void*)i);
       if (perm & PTE_D) {
-        // We need to write changes to the file.
+        // Page is dirty, we need to write changes to the file.
         struct file* file = mmap->file;
         uint old_off = file->off;
         file->off = (uint)i - (uint)mmap->start + (uint)mmap->offset;
@@ -148,9 +158,9 @@ free_mm(struct mm_struct* mm)
 {
   acquire(&mm->lock);
   if (--mm->users == 0) {
-    release(&mm->lock);
-    free_mmaps(mm);
-    acquire(&mm->lock);
+    if (!list_empty(&mm->mmap_list)) {
+      panic("mmap list not empty in free_mm");
+    }
     if (mm->pgdir != 0) {
       freevm(mm->pgdir);
     }
@@ -816,6 +826,10 @@ mmap(void* addr, int length, int prot, int flags, struct file* file,
     int offset)
 {
   int current_length = 0;
+  if (((prot & PROT_READ) && !(file->readable)) ||
+      ((prot & PROT_WRITE) && !(file->writable))) {
+    return ERR_PTR(-EACCES);
+  }
   for (current_length = 0; current_length < length;
       current_length += PGSIZE) {
     if (!set_pte_permissions(proc->mm->pgdir, addr + current_length,
@@ -878,10 +892,11 @@ handle_pagefault(uint address, uint err)
           ((mmap->prot & PROT_READ) == 0)) {
         return 0;
       }
-      load_mmap(mmap, address - mmap->start, (char*)PGROUNDDOWN((uint)address),
+      int retval = load_mmap(mmap, address - (uint)mmap->start,
+          (char*)PGROUNDDOWN((uint)address),
           is_write, PTE_P | PTE_U | PTE_W | PTE_D);
       release(&mmap->lock);
-      break;
+      return retval;
     }
   }
   return 0;
