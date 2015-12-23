@@ -212,6 +212,7 @@ exit:
   struct mm_struct* old_mm = proc->mm;
   proc->mm = kmem_cache_alloc(mm_cache);
   initlock(&proc->mm->lock, "proc->mm");
+  initlock(&proc->mm->mmap_list_lock, "proc->mmap_list");
   proc->mm->users = 1;
   proc->mm->pgdir = pgdir;
   proc->mm->sz = sz;

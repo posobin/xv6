@@ -199,6 +199,7 @@ void            clearpteu(pde_t *pgdir, char *uva);
 int             set_pte_permissions(pde_t* pgdir, void* addr, uint perm);
 int             get_pte_permissions(pde_t* pgdir, void* addr);
 int             mappages(pde_t*, void*, uint, uint, int);
+pte_t*          walkpgdir(pde_t *pgdir, const void *va, int alloc);
 
 // kmalloc.c
 void            init_caches(void);

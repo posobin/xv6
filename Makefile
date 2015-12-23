@@ -187,6 +187,7 @@ UPROGS=\
 	_ps\
 	_chroot\
 	_mmap_test\
+	_mmap_pp\
 
 passwd_file:
 	echo root::0:0:root:/root:/bin/sh > passwd_file

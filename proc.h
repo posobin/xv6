@@ -64,8 +64,14 @@ struct mmap_struct {
   struct file* file;
   int offset;
 
-  struct list_head list;
+  int users;
+
   struct spinlock lock;
+};
+
+struct mmap_list {
+  struct list_head list;
+  struct mmap_struct* mmap;
 };
 
 struct mm_struct {
@@ -74,6 +80,7 @@ struct mm_struct {
   uint sz;       // Size of process memory (bytes)
   struct list_head mmap_list; // List of mmaps
   struct spinlock lock;
+  struct spinlock mmap_list_lock;
 };
 
 extern struct cache_info* mm_cache;

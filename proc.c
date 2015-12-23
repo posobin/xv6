@@ -23,6 +23,7 @@ struct cache_info* mm_cache;
 struct cache_info* files_struct_cache;
 struct cache_info* fs_info_cache;
 struct cache_info* mmap_cache;
+struct cache_info* mmap_list_cache;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -53,6 +54,10 @@ pinit(void)
   mmap_cache = kmem_cache_create(sizeof(struct mmap_struct));
   if (mmap_cache == 0) {
     panic("Could not allocate mmap_struct cache");
+  }
+  mmap_list_cache = kmem_cache_create(sizeof(struct mmap_list));
+  if (mmap_list_cache == 0) {
+    panic("Could not allocate mmap_list cache");
   }
   INIT_LIST_HEAD(&ptable.list);
 }
@@ -112,21 +117,41 @@ allocproc(void)
 void
 free_mmaps(struct mm_struct* mm)
 {
+  if (mm->users > 1) {
+    return;
+  }
   struct list_head *pos, *next;
   list_for_each_safe(pos, next, &mm->mmap_list) {
-    struct mmap_struct* mmap = list_entry(pos, struct mmap_struct, list);
+    struct mmap_list* mmap_list = list_entry(pos, struct mmap_list, list);
+    struct mmap_struct* mmap = mmap_list->mmap;
     // Obviously, we need acquire.
     // Placing release right after list_del is safe, because nobody
     // else will know that that mmap exists.
     // Release is needed, because otherwise filewrite would panic when
     // it tries to sleep.
     acquire(&mmap->lock);
-    list_del(&mmap->list);
+    list_del(&mmap_list->list);
+    kmem_cache_free(mmap_list);
+    --(mmap->users);
+    if (mmap->users > 0) {
+      release(&mmap->lock);
+      for (uint i = (uint)mmap->start;
+          i < PGROUNDUP((uint)mmap->start + mmap->length);
+          i += PGSIZE) {
+        // Mark it as unused, because otherwise we would free it later,
+        // because it is in our page table.
+        set_pte_permissions(mm->pgdir, (void*)i, 0);
+      }
+      continue;
+    }
     release(&mmap->lock);
+    // Write to file.
     for (uint i = (uint)mmap->start;
         i < PGROUNDUP((uint)mmap->start + mmap->length);
         i += PGSIZE) {
-      if ((mmap->prot & MAP_SHARED) == 0) {
+      // We don’t have to write changes to the file in these two cases.
+      if ((mmap->flags & MAP_SHARED) == 0 ||
+          (mmap->flags & MAP_ANONYMOUS) != 0) {
         break;
       }
       int is_last_page =
@@ -180,6 +205,7 @@ setup_mm(void)
   struct mm_struct* mm = kmem_cache_alloc(mm_cache);
   if (!mm) return 0;
   initlock(&mm->lock, "proc->mm");
+  initlock(&mm->mmap_list_lock, "proc->mm->mmap_list");
   mm->users = 1;
   mm->pgdir = setupkvm();
   mm->sz = PGSIZE;
@@ -193,17 +219,40 @@ setup_mm(void)
 
 // Assumes that mm is already locked.
 static int
-add_mmap_to_mm(struct mm_struct* mm, struct mmap_struct* mmap)
+add_mmap_to_mm(struct mm_struct* mm, struct mmap_struct* mmap, pde_t* pgdir)
 {
-  struct mmap_struct* copy = kmem_cache_alloc(mmap_cache);
-  if (!copy) {
-    return -1;
+  acquire(&mmap->lock);
+  struct mmap_list* mmap_list = kmem_cache_alloc(mmap_list_cache);
+  if ((mmap->flags & MAP_SHARED) == 0) {
+    struct mmap_struct* copy = kmem_cache_alloc(mmap_cache);
+    if (!copy) {
+      release(&mmap->lock);
+      return -1;
+    }
+    *copy = *mmap;
+    if (copy->file != 0) {
+      copy->file = filedup(mmap->file);
+    }
+    mmap_list->mmap = copy;
+  } else {
+    mmap->users++;
+    mmap_list->mmap = mmap;
   }
-  *copy = *mmap;
-  if (copy->file != 0) {
-    copy->file = filedup(mmap->file);
+  if (mmap->flags & MAP_SHARED) {
+    for (uint start = (uint)mmap->start;
+        start < (uint)mmap->start + mmap->length;
+        start += PGSIZE) {
+      pte_t* entry = walkpgdir(pgdir, (void*)start, 0);
+      if (entry == 0) {
+        panic("add_mmap_to_mm: page table entry does not exist");
+      }
+      uint addr = PTE_ADDR(*entry);
+      uint flags = PTE_FLAGS(*entry);
+      mappages(mm->pgdir, (void*)start, PGSIZE, addr, flags);
+    }
   }
-  list_add_tail(&copy->list, &mm->mmap_list);
+  release(&mmap->lock);
+  list_add_tail(&mmap_list->list, &mm->mmap_list);
   return 0;
 }
 
@@ -221,10 +270,11 @@ copy_mm(unsigned int clone_flags, struct proc* p)
   mm = kmem_cache_alloc(mm_cache);
   if (!mm) return -ENOMEM;
   initlock(&mm->lock, "proc->mm");
+  initlock(&mm->mmap_list_lock, "proc->mmap_list");
   mm->users = 1;
   acquire(&p->mm->lock);
   mm->pgdir = copyuvm(p->mm->pgdir, p->mm->sz);
-  if (p->mm->pgdir == 0) {
+  if (mm->pgdir == 0) {
     release(&p->mm->lock);
     free_mm(mm);
     return -ENOMEM;
@@ -233,13 +283,18 @@ copy_mm(unsigned int clone_flags, struct proc* p)
   INIT_LIST_HEAD(&mm->mmap_list);
   // Copy mmaps
   struct list_head* list;
+  acquire(&p->mm->mmap_list_lock);
   list_for_each(list, &p->mm->mmap_list) {
-    struct mmap_struct* mmap = list_entry(list, struct mmap_struct, list);
-    if (add_mmap_to_mm(mm, mmap) < 0) {
+    struct mmap_list* mmap_list = list_entry(list, struct mmap_list, list);
+    struct mmap_struct* mmap = mmap_list->mmap;
+    if (add_mmap_to_mm(mm, mmap, p->mm->pgdir) < 0) {
+      release(&p->mm->mmap_list_lock);
       release(&p->mm->lock);
+      free_mm(mm);
       return -ENOMEM;
     }
   }
+  release(&p->mm->mmap_list_lock);
   release(&p->mm->lock);
   p->mm = mm;
   return 0;
@@ -497,6 +552,9 @@ exit(void)
   // Close all open files.
   free_files(proc->files);
   free_fs_info(proc->fs);
+  // We need to do free_mmaps here, and not when we are freeing mm,
+  // because we are freeing mm with ptable.lock held, which makes filewrite
+  // (that may happen in free_mmaps) panic.
   free_mmaps(proc->mm);
 
   acquire(&ptable.lock);
@@ -827,12 +885,17 @@ mmap(void* addr, int length, int prot, int flags, struct file* file,
     int offset)
 {
   int current_length = 0;
-  if (file->type != FD_INODE) {
-    return ERR_PTR(-EACCES);
+  if ((flags & (MAP_SHARED | MAP_PRIVATE)) == 0) {
+    return ERR_PTR(-EINVAL);
   }
-  if (((prot & PROT_READ) && !(file->readable)) ||
-      ((prot & PROT_WRITE) && !(file->writable))) {
-    return ERR_PTR(-EACCES);
+  if ((flags & MAP_ANONYMOUS) == 0) {
+    if (((prot & PROT_READ) && !(file->readable)) ||
+        ((prot & PROT_WRITE) && !(file->writable))) {
+      return ERR_PTR(-EACCES);
+    }
+    if (file->type != FD_INODE) {
+      return ERR_PTR(-EACCES);
+    }
   }
   for (current_length = 0; current_length < length;
       current_length += PGSIZE) {
@@ -848,14 +911,17 @@ mmap(void* addr, int length, int prot, int flags, struct file* file,
     .length = length,
     .prot = prot,
     .flags = flags,
-    .file = filedup(file),
+    .file = (file == 0 ? 0 : filedup(file)),
     .offset = offset,
+    .users = 1,
   };
   initlock(&mmap->lock, "mmap");
-  uint initial_offset = file->off;
-  file->off = offset;
-  fileread(file, mmap->start, length);
-  file->off = initial_offset;
+  if ((flags & MAP_ANONYMOUS) == 0) {
+    uint initial_offset = file->off;
+    file->off = offset;
+    fileread(file, mmap->start, PGROUNDUP(length));
+    file->off = initial_offset;
+  }
   uint permissions = PTE_P;
   if ((prot & PROT_READ) || (prot & PROT_EXEC)) {
     permissions |= PTE_U;
@@ -863,13 +929,17 @@ mmap(void* addr, int length, int prot, int flags, struct file* file,
   for (current_length = 0; current_length < length;
       current_length += PGSIZE) {
     if (!set_pte_permissions(proc->mm->pgdir, addr + current_length,
-          PTE_P | ((prot & PROT_READ) ? PTE_U : 0))) {
+          permissions)) {
       return ERR_PTR(-ENOMEM);
     }
   }
+  struct mmap_list* mmap_list = kmem_cache_alloc(mmap_list_cache);
+  mmap_list->mmap = mmap;
+
   acquire(&proc->mm->lock);
-  list_add_tail(&mmap->list, &proc->mm->mmap_list);
+  list_add_tail(&mmap_list->list, &proc->mm->mmap_list);
   release(&proc->mm->lock);
+
   return addr;
 }
 
@@ -889,8 +959,10 @@ handle_pagefault(uint address, uint err)
   if (!is_write) {
     return 0;
   }
+  acquire(&proc->mm->mmap_list_lock);
   list_for_each(pos, &proc->mm->mmap_list) {
-    struct mmap_struct* mmap = list_entry(pos, struct mmap_struct, list);
+    struct mmap_list* mmap_list = list_entry(pos, struct mmap_list, list);
+    struct mmap_struct* mmap = mmap_list->mmap;
     if (mmap->start <= (char*)address &&
         (char*)address < mmap->start + PGROUNDUP(mmap->length)) {
       acquire(&mmap->lock);
@@ -898,15 +970,19 @@ handle_pagefault(uint address, uint err)
       // Check permissions.
       if ((is_write && ((mmap->prot & PROT_WRITE) == 0)) ||
           ((mmap->prot & PROT_READ) == 0)) {
+        acquire(&mmap->lock);
+        release(&proc->mm->mmap_list_lock);
         return 0;
       }
       int retval = load_mmap(mmap, address - (uint)mmap->start,
           (char*)PGROUNDDOWN((uint)address),
           is_write, PTE_P | PTE_U | PTE_W | PTE_D);
       release(&mmap->lock);
+      release(&proc->mm->mmap_list_lock);
       return retval;
     }
   }
+  release(&proc->mm->mmap_list_lock);
   return 0;
 }
 
