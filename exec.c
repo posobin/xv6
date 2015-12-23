@@ -120,7 +120,7 @@ exit:
       st = -E2BIG;
       goto bad;
     }
-    if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0) {
+    if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz, PTE_W | PTE_U)) == 0) {
       st = -ENOMEM;
       goto bad;
     }
@@ -143,7 +143,7 @@ exit:
   // Allocate two pages at the next page boundary.
   // Make the first inaccessible.  Use the second as the user stack.
   sz = PGROUNDUP(sz);
-  if((sz = allocuvm(pgdir, sz, sz + 2*PGSIZE)) == 0) {
+  if((sz = allocuvm(pgdir, sz, sz + 2*PGSIZE, PTE_W | PTE_U)) == 0) {
     st = -ENOMEM;
     goto bad;
   }
@@ -215,6 +215,7 @@ exit:
   proc->mm->users = 1;
   proc->mm->pgdir = pgdir;
   proc->mm->sz = sz;
+  INIT_LIST_HEAD(&proc->mm->mmap_list);
   proc->tf->eip = elf.entry;  // main
   proc->tf->esp = sp;
   switchuvm(proc);

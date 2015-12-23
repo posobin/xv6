@@ -79,6 +79,11 @@ trap(struct trapframe *tf)
     break;
    
   //PAGEBREAK: 13
+  case T_PGFLT:
+    if (handle_pagefault(rcr2(), tf->err)) {
+      break;
+    }
+    // fall-through
   default:
     if(proc == 0 || (tf->cs&3) == 0){
       // In kernel, it must be our mistake.

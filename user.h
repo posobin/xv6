@@ -43,6 +43,7 @@ int exit_group(void) __attribute__((noreturn));
 int sched_yield(void);
 int mount(char*, char*);
 int chroot(char*);
+char* mmap(char*, int, int, int, int, int);
 
 // ulib.c
 int stat(char*, struct stat*);

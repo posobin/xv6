@@ -11,6 +11,8 @@
 #include "fs.h"
 #include "file.h"
 #include "stat.h"
+#include "err.h"
+#include "buf.h"
 
 struct ptable ptable;
 
@@ -20,6 +22,7 @@ struct cache_info* proc_cache;
 struct cache_info* mm_cache;
 struct cache_info* files_struct_cache;
 struct cache_info* fs_info_cache;
+struct cache_info* mmap_cache;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -46,6 +49,10 @@ pinit(void)
   fs_info_cache = kmem_cache_create(sizeof(struct fs_info_struct));
   if (fs_info_cache == 0) {
     panic("Could not allocate fs_info_struct cache");
+  }
+  mmap_cache = kmem_cache_create(sizeof(struct mmap_struct));
+  if (mmap_cache == 0) {
+    panic("Could not allocate mmap_struct cache");
   }
   INIT_LIST_HEAD(&ptable.list);
 }
@@ -102,6 +109,38 @@ allocproc(void)
   return p;
 }
 
+void
+free_mmaps(struct mm_struct* mm)
+{
+  struct list_head *pos, *next;
+  list_for_each_safe(pos, next, &mm->mmap_list) {
+    struct mmap_struct* mmap = list_entry(pos, struct mmap_struct, list);
+    list_del(&mmap->list);
+    for (uint i = (uint)mmap->start;
+        i < PGROUNDUP((uint)mmap->start + mmap->length);
+        i += PGSIZE) {
+      int is_last_page =
+        (i + PGSIZE >= PGROUNDUP((uint)mmap->start + mmap->length));
+      int perm = get_pte_permissions(mm->pgdir, (void*)i);
+      if (perm & PTE_D) {
+        // We need to write changes to the file.
+        struct file* file = mmap->file;
+        uint old_off = file->off;
+        file->off = (uint)i - (uint)mmap->start + (uint)mmap->offset;
+        uint amount = PGSIZE;
+        if (is_last_page) {
+          ilock(file->ip);
+          amount = file->ip->size;
+          iunlock(file->ip);
+        }
+        filewrite(file, (char*)i, amount);
+        file->off = old_off;
+      }
+    }
+    kmem_cache_free(mmap);
+  }
+}
+
 // Decrease number of users of the memory map,
 // free memory when user count reaches 0.
 void
@@ -109,6 +148,9 @@ free_mm(struct mm_struct* mm)
 {
   acquire(&mm->lock);
   if (--mm->users == 0) {
+    release(&mm->lock);
+    free_mmaps(mm);
+    acquire(&mm->lock);
     if (mm->pgdir != 0) {
       freevm(mm->pgdir);
     }
@@ -131,11 +173,27 @@ setup_mm(void)
   mm->users = 1;
   mm->pgdir = setupkvm();
   mm->sz = PGSIZE;
+  INIT_LIST_HEAD(&mm->mmap_list);
   if (!mm->pgdir) {
     free_mm(mm);
     return 0;
   }
   return mm;
+}
+
+// Assumes that mm is already locked.
+static int
+add_mmap_to_mm(struct mm_struct* mm, struct mmap_struct* mmap)
+{
+  struct mmap_struct* copy = kmem_cache_alloc(mmap_cache);
+  if (!copy) {
+    return -1;
+  }
+  *copy = *mmap;
+  /*mmap_inc_buf_counts(copy);*/
+  /*char* start = mmap->start;*/
+  list_add_tail(&copy->list, &mm->mmap_list);
+  return 0;
 }
 
 static int
@@ -161,6 +219,16 @@ copy_mm(unsigned int clone_flags, struct proc* p)
     return -ENOMEM;
   }
   mm->sz = p->mm->sz;
+  INIT_LIST_HEAD(&mm->mmap_list);
+  // Copy mmaps
+  struct list_head* list;
+  list_for_each(list, &p->mm->mmap_list) {
+    struct mmap_struct* mmap = list_entry(list, struct mmap_struct, list);
+    if (add_mmap_to_mm(p->mm, mmap) < 0) {
+      release(&p->mm->lock);
+      return -ENOMEM;
+    }
+  }
   release(&p->mm->lock);
   p->mm = mm;
   return 0;
@@ -307,7 +375,7 @@ growproc(int n)
   
   sz = proc->mm->sz;
   if(n > 0){
-    if((sz = allocuvm(proc->mm->pgdir, sz, sz + n)) == 0)
+    if((sz = allocuvm(proc->mm->pgdir, sz, sz + n, PTE_W | PTE_U)) == 0)
       return -1;
   } else if(n < 0){
     if((sz = deallocuvm(proc->mm->pgdir, sz, sz + n)) == 0)
@@ -417,8 +485,8 @@ exit(void)
 
   // Close all open files.
   free_files(proc->files);
-
   free_fs_info(proc->fs);
+  free_mmaps(proc->mm);
 
   acquire(&ptable.lock);
 
@@ -491,6 +559,7 @@ wait(void)
       havekids = 1;
       if(p->state == ZOMBIE){
         // Found one.
+        release(&ptable.lock);
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
@@ -501,7 +570,6 @@ wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
-        release(&ptable.lock);
         return pid;
       }
     }
@@ -549,6 +617,7 @@ scheduler(void)
         }
         if (p->mm != 0) {
           free_mm(p->mm);
+          p->mm = 0;
         }
         struct list_head* prev = pos;
         pos = pos->prev;
@@ -741,6 +810,83 @@ kill(int pid)
   return -ESRCH;
 }
 
+// addr must be page-aligned.
+void*
+mmap(void* addr, int length, int prot, int flags, struct file* file,
+    int offset)
+{
+  int current_length = 0;
+  for (current_length = 0; current_length < length;
+      current_length += PGSIZE) {
+    if (!set_pte_permissions(proc->mm->pgdir, addr + current_length,
+          PTE_P | PTE_W)) {
+      return ERR_PTR(-ENOMEM);
+    }
+  }
+  memset(addr, 0, current_length);
+  struct mmap_struct* mmap = kmem_cache_alloc(mmap_cache);
+  *mmap = (struct mmap_struct) {
+    .start = addr,
+    .length = length,
+    .prot = prot,
+    .flags = flags,
+    .file = filedup(file),
+    .offset = offset,
+  };
+  initlock(&mmap->lock, "mmap");
+  uint initial_offset = file->off;
+  file->off = offset;
+  fileread(file, mmap->start, length);
+  file->off = initial_offset;
+  for (current_length = 0; current_length < length;
+      current_length += PGSIZE) {
+    if (!set_pte_permissions(proc->mm->pgdir, addr + current_length,
+          PTE_P | ((prot & PROT_READ) ? PTE_U : 0))) {
+      return ERR_PTR(-ENOMEM);
+    }
+  }
+  acquire(&proc->mm->lock);
+  list_add_tail(&mmap->list, &proc->mm->mmap_list);
+  release(&proc->mm->lock);
+  return addr;
+}
+
+int
+load_mmap(struct mmap_struct* mmap, uint offset, char* dst,
+    int is_write, uint perm)
+{
+  set_pte_permissions(proc->mm->pgdir, dst, perm);
+  return 1;
+}
+
+int
+handle_pagefault(uint address, uint err)
+{
+  struct list_head* pos;
+  int is_write = (err & 2);
+  if (!is_write) {
+    return 0;
+  }
+  list_for_each(pos, &proc->mm->mmap_list) {
+    struct mmap_struct* mmap = list_entry(pos, struct mmap_struct, list);
+    if (mmap->start <= (char*)address &&
+        (char*)address < mmap->start + PGROUNDUP(mmap->length)) {
+      acquire(&mmap->lock);
+      // Found the corresponding mmap.
+      // Check permissions.
+      if ((is_write && ((mmap->prot & PROT_WRITE) == 0)) ||
+          ((mmap->prot & PROT_READ) == 0)) {
+        return 0;
+      }
+      load_mmap(mmap, address - mmap->start, (char*)PGROUNDDOWN((uint)address),
+          is_write, PTE_P | PTE_U | PTE_W | PTE_D);
+      release(&mmap->lock);
+      break;
+    }
+  }
+  return 0;
+}
+
 //PAGEBREAK: 36
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.
@@ -761,7 +907,6 @@ procdump(void)
   char *state;
   uint pc[10];
   
-  /*for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){*/
   struct list_head *pos, *next;
   list_for_each_safe(pos, next, &ptable.list) {
     p = list_entry(pos, struct proc, list);

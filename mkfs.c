@@ -107,6 +107,7 @@ struct disk_file files[] =
   {"_useradd",    "bin/useradd",     S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_ps",         "bin/ps",          S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"_chroot",     "bin/chroot",      S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
+  {"_mmap_test",  "bin/mmap_test",   S_IFREG | S_IRUGO | S_IWUSR | S_IXUGO, 0, 0},
   {"",            "test",            DEFAULT_DIR, 0, 0},
   {"",            "test/chroot",     DEFAULT_DIR, 0, 0},
   {"",            "test/chroot/bin", DEFAULT_DIR, 0, 0},

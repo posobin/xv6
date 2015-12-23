@@ -785,3 +785,23 @@ sys_chown(void)
   commit_trans();
   return 0;
 }
+
+int
+sys_mmap(void)
+{
+  int addr, length, prot, flags, offset;
+  struct file* f;
+  if (argint(0, &addr) < 0 || argint(1, &length) < 0 || argint(2, &prot) < 0 ||
+      argint(3, &flags) < 0 || argfd(4, 0, &f) < 0 || argint(5, &offset) < 0) {
+    return -EINVAL;
+  }
+  addr = PGROUNDUP(addr);
+  if ((uint)addr >= proc->mm->sz || (uint)addr + length > proc->mm->sz) {
+    return -EINVAL;
+  }
+  struct inode* ip = f->ip;
+  if (ip->size < (uint)offset + length) {
+    /*return -ENXIO;*/
+  }
+  return (int)mmap((void*)addr, length, prot, flags, f, offset);
+}

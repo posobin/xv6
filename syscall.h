@@ -37,3 +37,4 @@
 #define SYS_sched_yield 36
 #define SYS_mount       37
 #define SYS_chroot      38
+#define SYS_mmap        39

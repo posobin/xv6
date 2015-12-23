@@ -2,6 +2,7 @@
 #include "list.h"
 #include "clone_flags.h"
 #include "param.h"
+#include "mmap.h"
 // Segments in proc->gdt.
 #define NSEGS     7
 
@@ -53,10 +54,25 @@ struct context {
   uint eip;
 };
 
+// Info about process’s mmaps.
+struct mmap_struct {
+  char* start; // Better be page-aligned.
+  int length;
+  int prot;
+  int flags;
+
+  struct file* file;
+  int offset;
+
+  struct list_head list;
+  struct spinlock lock;
+};
+
 struct mm_struct {
   pde_t* pgdir;  // Page table
-  uint users; // Number of links to the page table
+  uint users;    // Number of links to the page table
   uint sz;       // Size of process memory (bytes)
+  struct list_head mmap_list; // List of mmaps
   struct spinlock lock;
 };
 

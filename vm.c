@@ -67,7 +67,7 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
-static int
+int
 mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
 {
   char *a, *last;
@@ -78,8 +78,8 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
   for(;;){
     if((pte = walkpgdir(pgdir, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_P)
-      panic("remap");
+    /*if(*pte & PTE_P)*/
+      /*panic("remap");*/
     *pte = pa | perm | PTE_P;
     if(a == last)
       break;
@@ -191,6 +191,24 @@ inituvm(pde_t *pgdir, char *init, uint sz)
   memmove(mem, init, sz);
 }
 
+int
+set_pte_permissions(pde_t* pgdir, void* addr, uint perm)
+{
+  pte_t* entry = walkpgdir(pgdir, addr, 0);
+  if (entry == 0) return 0;
+  // Clear read, write and execute permissions on the entry.
+  *entry = (*entry & ~0xFFF) | (perm & 0xFFF);
+  return 1;
+}
+
+int
+get_pte_permissions(pde_t* pgdir, void* addr)
+{
+  pte_t* entry = walkpgdir(pgdir, addr, 0);
+  if (entry == 0) return 0;
+  return ((*entry) & 0xFFF);
+}
+
 // Load a program segment into pgdir.  addr must be page-aligned
 // and the pages from addr to addr+sz must already be mapped.
 int
@@ -218,7 +236,7 @@ loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz)
 // Allocate page tables and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
 int
-allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
+allocuvm(pde_t *pgdir, uint oldsz, uint newsz, uint perm)
 {
   char *mem;
   uint a;
@@ -237,7 +255,7 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       return 0;
     }
     memset(mem, 0, PGSIZE);
-    mappages(pgdir, (char*)a, PGSIZE, v2p(mem), PTE_W|PTE_U);
+    mappages(pgdir, (char*)a, PGSIZE, v2p(mem), perm);
   }
   return newsz;
 }
