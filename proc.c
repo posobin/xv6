@@ -926,6 +926,9 @@ mmap(void* addr, int length, int prot, int flags, struct file* file,
   if ((prot & PROT_READ) || (prot & PROT_EXEC)) {
     permissions |= PTE_U;
   }
+  if (flags & MAP_SHARED) {
+    permissions |= PTE_MMAP;
+  }
   for (current_length = 0; current_length < length;
       current_length += PGSIZE) {
     if (!set_pte_permissions(proc->mm->pgdir, addr + current_length,
@@ -974,9 +977,13 @@ handle_pagefault(uint address, uint err)
         release(&proc->mm->mmap_list_lock);
         return 0;
       }
+      uint permissions = PTE_P | PTE_U | PTE_W | PTE_D;
+      if (mmap->flags & MAP_SHARED) {
+        permissions |= PTE_MMAP;
+      }
       int retval = load_mmap(mmap, address - (uint)mmap->start,
           (char*)PGROUNDDOWN((uint)address),
-          is_write, PTE_P | PTE_U | PTE_W | PTE_D);
+          is_write, permissions);
       release(&mmap->lock);
       release(&proc->mm->mmap_list_lock);
       return retval;
