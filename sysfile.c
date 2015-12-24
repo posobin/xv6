@@ -226,7 +226,7 @@ sys_unlink(void)
     goto bad;
   }
 
-  if((get_current_permissions(dp) & 3) != 3) {
+  if(proc->euid != 0 && (get_current_permissions(dp) & 3) != 3) {
     status = EPERM;
     goto bad;
   }
