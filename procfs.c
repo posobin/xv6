@@ -56,6 +56,12 @@ procfs_inode_update(struct inode* ip)
 { }
 
 static int
+procfs_inode_write(struct inode* ip, char* dst, uint off, uint n)
+{
+  return -1;
+}
+
+static int
 procfs_proc_file_name_read(struct inode* ip, char* dst, uint off, uint n);
 static int
 procfs_proc_file_state_read(struct inode* ip, char* dst, uint off, uint n);
@@ -81,6 +87,7 @@ struct {
 };
 
 #define N_PROC_ENTRIES (NELEM(procfs_proc_files_table) - 2 + 1)
+#define FREE_PAGES_INUM 2
 
 static int
 procfs_proc_file_write(struct inode* ip, char* dst, uint off, uint n)
@@ -243,6 +250,15 @@ procfs_proc_file_uid_read(struct inode* ip, char* dst, uint off, uint n)
   return read_string(result, len, dst, off, n);
 }
 
+static int
+procfs_free_pages_read(struct inode* ip, char* dst, uint off, uint n)
+{
+  char result[16];
+  itoa(result, free_pages_count);
+  int len = strlen(result);
+  return read_string(result, len, dst, off, n);
+}
+
 static void
 init_procfs_proc_dir(struct inode* ip);
 
@@ -284,6 +300,20 @@ init_procfs_proc_dir(struct inode* ip)
   ip->size = 0;
   ip->flags = I_VALID;
   ip->mode = (0555 | S_IFDIR);
+  ip->uid = 0;
+  ip->gid = 0;
+  ip->additional_info = (void*)1;
+}
+
+static void
+init_procfs_free_pages(struct inode* ip)
+{
+  ip->ops.read = procfs_free_pages_read;
+  ip->ops.write = procfs_inode_write;
+  ip->ops.update = procfs_inode_update;
+  ip->size = 0;
+  ip->flags = I_VALID;
+  ip->mode = (0444 | S_IFREG);
   ip->uid = 0;
   ip->gid = 0;
   ip->additional_info = (void*)1;
@@ -333,6 +363,13 @@ procfs_root_read(struct inode* ip, char* dst, uint off, uint n)
     off -= sizeof(struct dirent);
   }
 
+  strncpy(entry.name, "free_pages", 11);
+  entry.inum = FREE_PAGES_INUM;
+  read_str((char*)&entry, sizeof(struct dirent), &dst, &off, n, &written);
+  if (off >= sizeof(struct dirent)) {
+    off -= sizeof(struct dirent);
+  }
+
   return written;
 }
 
@@ -352,6 +389,12 @@ procfs_root_lookup(struct inode* ip, char* name, uint* poff)
   }
   uint pid = atoi(name, 10);
   if (pid == 0) {
+    if (namecmp(name, "free_pages") == 0) {
+      struct filesystem* fs = find_fs(PROCDEV);
+      struct inode* node = iget(fs, FREE_PAGES_INUM);
+      init_procfs_free_pages(node);
+      return node;
+    }
     if (namecmp(name, "self") != 0) {
       return ERR_PTR(-ENOENT);
     }

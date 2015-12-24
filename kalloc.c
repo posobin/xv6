@@ -12,6 +12,8 @@
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
 
+int free_pages_count = 0;
+
 struct run {
   struct run *next;
 };
@@ -60,6 +62,7 @@ void
 kfree(char *v)
 {
   struct run *r;
+  free_pages_count++;
 
   if((uint)v % PGSIZE || v < end || v2p(v) >= PHYSTOP)
     panic("kfree");
@@ -83,6 +86,7 @@ char*
 kalloc(void)
 {
   struct run *r;
+  free_pages_count--;
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
