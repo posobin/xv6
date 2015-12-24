@@ -334,6 +334,7 @@ free_files(struct files_struct* files)
 {
   acquire(&files->lock);
   if (--files->users == 0) {
+    release(&files->lock);
     for (int fd = 0; fd < NOFILE; fd++){
       if(files->fd[fd]){
         fileclose(files->fd[fd]);
@@ -341,7 +342,6 @@ free_files(struct files_struct* files)
       }
     }
     kfree((char*)files->fd);
-    release(&files->lock);
     kmem_cache_free(files);
   } else {
     release(&files->lock);

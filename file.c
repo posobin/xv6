@@ -89,8 +89,8 @@ fileclose(struct file *f)
     return;
   }
   ff = *f;
-  kmem_cache_free(f);
   release(&f->lock);
+  kmem_cache_free(f);
   
   if(ff.type == FD_FIFO && !readopen && !writeopen){
     // Close our end of the pipe,
