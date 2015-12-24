@@ -262,8 +262,8 @@ struct inode* iget(struct filesystem* dev, uint inum);
 //PAGEBREAK!
 // Allocate a new inode with the given type on device dev.
 // A free inode has a type of zero.
-struct inode*
-_ialloc(struct filesystem* fs, short type)
+static struct inode*
+_ialloc(struct filesystem* fs, uint mode)
 {
   int inum;
   struct buf *bp;
@@ -276,9 +276,9 @@ _ialloc(struct filesystem* fs, short type)
   for(inum = 1; inum < sb.ninodes; inum++){
     bp = bread(dev, IBLOCK(inum));
     dip = (struct dinode*)bp->data + inum%IPB;
-    if(dip->type == 0){  // a free inode
+    if(dip->mode == 0){  // a free inode
       memset(dip, 0, sizeof(*dip));
-      dip->type = type;
+      dip->mode = mode;
       log_write(bp);   // mark it allocated on the disk
       brelse(bp);
       return iget(fs, inum);
@@ -289,12 +289,12 @@ _ialloc(struct filesystem* fs, short type)
 }
 
 struct inode*
-ialloc(struct filesystem* fs, short type)
+ialloc(struct filesystem* fs, uint mode)
 {
   if (fs->ops.alloc == 0) {
-    return _ialloc(fs, type);
+    return _ialloc(fs, mode);
   } else {
-    return fs->ops.alloc(fs, type);
+    return fs->ops.alloc(fs, mode);
   }
 }
 

@@ -271,6 +271,7 @@ copy_mm(unsigned int clone_flags, struct proc* p)
   if (!mm) return -ENOMEM;
   initlock(&mm->lock, "proc->mm");
   initlock(&mm->mmap_list_lock, "proc->mmap_list");
+  INIT_LIST_HEAD(&mm->mmap_list);
   mm->users = 1;
   acquire(&p->mm->lock);
   mm->pgdir = copyuvm(p->mm->pgdir, p->mm->sz);
@@ -280,7 +281,6 @@ copy_mm(unsigned int clone_flags, struct proc* p)
     return -ENOMEM;
   }
   mm->sz = p->mm->sz;
-  INIT_LIST_HEAD(&mm->mmap_list);
   // Copy mmaps
   struct list_head* list;
   acquire(&p->mm->mmap_list_lock);
@@ -465,6 +465,7 @@ clone(void* child_stack, unsigned int clone_flags)
   int retval;
   np->mm = proc->mm;
   if ((retval = copy_mm(clone_flags, np)) < 0) {
+    np->mm = 0;
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
@@ -628,12 +629,17 @@ wait(void)
       havekids = 1;
       if(p->state == ZOMBIE){
         // Found one.
+        list_del_init(pos);
         release(&ptable.lock);
         pid = p->pid;
-        kfree(p->kstack);
-        p->kstack = 0;
-        free_mm(p->mm);
-        p->mm = 0;
+        if (p->kstack) {
+          kfree(p->kstack);
+          p->kstack = 0;
+        }
+        if (p->mm) {
+          free_mm(p->mm);
+          p->mm = 0;
+        }
         p->state = UNUSED;
         p->pid = 0;
         p->parent = 0;
@@ -646,7 +652,7 @@ wait(void)
     // No point waiting if we don't have any children.
     if(!havekids || proc->killed){
       release(&ptable.lock);
-      return -1;
+      return -ECHILD;
     }
 
     // Wait for children to exit.  (See wakeup1 call in proc_exit.)

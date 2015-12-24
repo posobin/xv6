@@ -335,7 +335,6 @@ ialloc(ushort type, int mode, int uid, int gid)
   struct dinode din;
 
   bzero(&din, sizeof(din));
-  din.type = xshort(-1);
   din.mode = xint(type_to_mode(type) | mode);
   din.nlink = xshort(1);
   din.size = xint(0);

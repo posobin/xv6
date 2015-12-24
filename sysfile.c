@@ -299,7 +299,7 @@ create(char *path, short type, short major, short minor, uint mode)
     iunlock(dp);
     return ERR_PTR(-EPERM);
   }
-  if((ip = ialloc(dp->fs, type)) == 0) {
+  if((ip = ialloc(dp->fs, type_to_mode(type))) == 0) {
     return ERR_PTR(-EIO);
   }
 

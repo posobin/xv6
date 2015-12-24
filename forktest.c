@@ -14,6 +14,21 @@ printf(int fd, char *s, ...)
 }
 
 void
+printnum(int fd, int num)
+{
+  char str[11];
+  str[9] = '\n';
+  str[10] = 0;
+  int i = 8;
+  while (num > 0) {
+    str[i] = '0' + (num % 10);
+    num /= 10;
+    i--;
+  }
+  printf(1, str + i + 1);
+}
+
+void
 forktest(void)
 {
   int n, pid;
@@ -21,6 +36,7 @@ forktest(void)
   printf(1, "fork test\n");
 
   for(n=0; n<N; n++){
+    printnum(1, n);
     pid = fork();
     if(pid < 0)
       break;
@@ -34,6 +50,7 @@ forktest(void)
   }
   
   for(; n > 0; n--){
+    printnum(1, n);
     if(wait() < 0){
       printf(1, "wait stopped early\n");
       exit();

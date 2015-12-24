@@ -41,7 +41,7 @@ void            readsb(int dev, struct superblock *sb);
 int             dirlink(struct inode*, char*, uint);
 struct inode*   _dirlookup(struct inode*, char*, uint*);
 struct inode*   dirlookup(struct inode*, char*, uint*);
-struct inode*   ialloc(struct filesystem*, short);
+struct inode*   ialloc(struct filesystem*, uint);
 struct inode*   idup(struct inode*);
 struct inode*   iget(struct filesystem*, uint);
 struct filesystem* find_fs(uint);
