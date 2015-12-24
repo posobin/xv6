@@ -20,6 +20,7 @@ const int NTHREADS = 300;
 int
 main()
 {
+  sleep(1000);
   thread_t* threads = (thread_t*)malloc(NTHREADS * sizeof(thread_t));
   int i;
   for (i = 0; i < NTHREADS; ++i) {

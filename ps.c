@@ -100,7 +100,8 @@ main()
   while (read(fd, &de, sizeof(de)) == sizeof(de)) {
     if (strcmp(".", de.name) == 0 ||
         strcmp("..", de.name) == 0 ||
-        strcmp("self", de.name) == 0) {
+        strcmp("self", de.name) == 0 ||
+        strcmp("free_pages", de.name) == 0) {
       continue;
     }
     char ppid[10];
