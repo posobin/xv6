@@ -86,13 +86,14 @@ char*
 kalloc(void)
 {
   struct run *r;
-  free_pages_count--;
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r) {
     kmem.freelist = r->next;
+    free_pages_count--;
+  }
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;
