@@ -188,6 +188,7 @@ UPROGS=\
 	_chroot\
 	_mmap_test\
 	_mmap_pp\
+	_thread_test\
 
 passwd_file:
 	echo root::0:0:root:/root:/bin/sh > passwd_file
